@@ -1,0 +1,11 @@
+# SuperMall/.gitignore
+
+# Rác hệ điều hành
+.DS_Store
+Thumbs.db
+
+# Rác của VS Code
+.vscode/
+
+# Thư viện (đề phòng lỡ cài nhầm ở root)
+node_modules/
