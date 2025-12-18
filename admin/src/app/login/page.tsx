@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import { useState } from 'react'
@@ -6,10 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, ShoppingBag } from 'lucide-react'
+import axiosClient from '@/lib/axiosClient' // Import axios đã cấu hình
 
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('') // Thêm biến hiển thị lỗi
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -18,33 +21,46 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError('') // Reset lỗi cũ
 
-    // Giả lập login
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      // 1. Gọi API Login thật
+      const { data } = await axiosClient.post('/auth/login', {
+        email: formData.email,
+        password: formData.password
+      })
+
+      // 2. Nếu thành công -> Lưu Token vào LocalStorage
+      // (Để sau này các trang khác biết là đã đăng nhập)
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+
+      // 3. Chuyển hướng về trang chủ
       router.push('/')
-    }, 1500)
+    } catch (err: any) {
+      console.error('Lỗi đăng nhập:', err)
+      // Hiển thị thông báo lỗi từ Server gửi về (nếu có)
+      setError(
+        err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại!'
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    // SỬA: Thêm overflow-hidden để cắt bỏ thanh cuộn, dùng h-screen để vừa khít
     <div className="w-full h-screen overflow-hidden lg:grid lg:grid-cols-2">
       {/* CỘT TRÁI: ẢNH DECOR */}
       <div className="hidden relative h-full w-full bg-zinc-900 lg:flex flex-col justify-between p-10 text-white">
-        {/* Ảnh nền */}
         <img
           src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1920"
           alt="Login Background"
           className="absolute inset-0 h-full w-full object-cover opacity-50 z-0"
         />
-
-        {/* Logo (Z-index cao hơn để nổi lên trên ảnh) */}
         <div className="relative z-10 flex items-center text-lg font-medium">
           <ShoppingBag className="mr-2 h-6 w-6" />
           SuperMall Admin
         </div>
-
-        {/* Quote */}
         <div className="relative z-10">
           <blockquote className="space-y-2">
             <p className="text-lg">
@@ -70,13 +86,20 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* HIỂN THỊ LỖI NẾU CÓ */}
+          {error && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm text-center border border-red-200">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="grid gap-6">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@example.com"
+                placeholder="admin@supermall.com"
                 required
                 className="h-11"
                 value={formData.email}
@@ -125,13 +148,6 @@ export default function LoginPage() {
               className="underline underline-offset-4 hover:text-primary"
             >
               Điều khoản dịch vụ
-            </a>{' '}
-            và{' '}
-            <a
-              href="#"
-              className="underline underline-offset-4 hover:text-primary"
-            >
-              Chính sách bảo mật
             </a>
             .
           </p>

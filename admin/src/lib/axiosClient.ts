@@ -2,15 +2,25 @@ import axios from 'axios'
 
 const axiosClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api',
-  timeout: 10000, // 10 giây timeout
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
   }
 })
 
-// ✅ Thêm interceptor để debug
+// ✅ SỬA ĐOẠN NÀY: Thêm logic lấy Token gắn vào Header
 axiosClient.interceptors.request.use(
   (config) => {
+    // 1. Lấy token từ LocalStorage (nếu đang chạy ở trình duyệt)
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token')
+
+      // 2. Nếu có token thì kẹp vào Header "Authorization"
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
+
     console.log('📤 Request:', config.method?.toUpperCase(), config.url)
     return config
   },
@@ -20,6 +30,7 @@ axiosClient.interceptors.request.use(
   }
 )
 
+// Đoạn Response bên dưới giữ nguyên
 axiosClient.interceptors.response.use(
   (response) => {
     console.log('📥 Response:', response.status, response.config.url)

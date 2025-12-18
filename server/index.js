@@ -4,6 +4,16 @@ const mongoose = require('mongoose')
 const cors = require('cors')
 
 const productRoutes = require('./routes/productRoutes')
+const authRoutes = require('./routes/authRoutes')
+const categoryRoutes = require('./routes/categoryRoutes')
+const brandRoutes = require('./routes/brandRoutes')
+const userRoutes = require('./routes/userRoutes')
+const orderRoutes = require('./routes/orderRoutes')
+const customerRoutes = require('./routes/customerRoutes')
+const bannerRoutes = require('./routes/bannerRoutes')
+const voucherRoutes = require('./routes/voucherRoutes')
+const statRoutes = require('./routes/statRoutes')
+const reviewRoutes = require('./routes/reviewRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -13,12 +23,6 @@ app.use(cors())
 
 // Body parser
 app.use(express.json())
-
-// LOG REQUEST
-app.use((req, res, next) => {
-  console.log('📨', req.method, req.path)
-  next()
-})
 
 // ROOT ROUTE
 app.get('/', (req, res) => {
@@ -37,7 +41,19 @@ app.get('/api/test', (req, res) => {
 })
 
 // PRODUCTS ROUTES
+app.use('/api/roles', require('./routes/roleRoutes'))
+
 app.use('/api/products', productRoutes)
+app.use('/api/auth', authRoutes)
+app.use('/api/categories', categoryRoutes)
+app.use('/api/brands', brandRoutes)
+app.use('/api/users', userRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/customers', customerRoutes)
+app.use('/api/banners', bannerRoutes)
+app.use('/api/vouchers', voucherRoutes)
+app.use('/api/stats', statRoutes)
+app.use('/api/reviews', reviewRoutes)
 
 // ✅ 404 HANDLER - Đặt CUỐI CÙNG, sau tất cả routes
 app.use((req, res) => {
