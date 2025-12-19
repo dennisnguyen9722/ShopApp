@@ -18,4 +18,5 @@ export type RootStackParamList = {
   Login: undefined
   Main: undefined // Chứa Tab Bar
   ProductDetail: { product: Product } // Màn hình chi tiết cần nhận vào 1 sản phẩm
+  Checkout: undefined
 }

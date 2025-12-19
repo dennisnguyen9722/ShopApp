@@ -198,7 +198,10 @@ export default function CartScreen({ navigation }: any) {
                 {formatCurrency(totalPrice)}
               </Text>
             </View>
-            <TouchableOpacity style={styles.checkoutBtn}>
+            <TouchableOpacity
+              style={styles.checkoutBtn}
+              onPress={() => navigation.navigate('Checkout')}
+            >
               <Text style={styles.checkoutText}>Thanh toán</Text>
             </TouchableOpacity>
           </View>
