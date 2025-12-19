@@ -12,7 +12,8 @@ import {
   ShoppingBag,
   ShieldCheck,
   Megaphone,
-  MessageSquare
+  MessageSquare,
+  Settings
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
@@ -78,6 +79,12 @@ const menuItems = [
     icon: ShieldCheck,
     href: '/roles',
     permission: 'roles.manage'
+  },
+  {
+    title: 'Cấu hình',
+    icon: Settings,
+    href: '/settings',
+    permission: undefined // Ai login rồi cũng nên có quyền chỉnh profile cá nhân, còn chỉnh Shop thì API đã chặn
   }
 ]
 

@@ -125,4 +125,57 @@ router.get('/me', protect, async (req, res) => {
   }
 })
 
+// 4. CẬP NHẬT HỒ SƠ (Avatar, Tên)
+router.put('/profile', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+
+    if (user) {
+      user.name = req.body.name || user.name
+      user.avatar = req.body.avatar || user.avatar
+
+      // Nếu có update các field khác thì thêm vào đây
+
+      const updatedUser = await user.save()
+
+      // Trả về user đã update kèm role (để frontend update context)
+      const populatedUser = await updatedUser.populate('role')
+
+      res.json({
+        _id: populatedUser._id,
+        name: populatedUser.name,
+        email: populatedUser.email,
+        role: populatedUser.role,
+        avatar: populatedUser.avatar,
+        token: req.headers.authorization.split(' ')[1] // Trả lại token cũ
+      })
+    } else {
+      res.status(404).json({ message: 'User not found' })
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+// 5. ĐỔI MẬT KHẨU
+router.put('/change-password', protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+    const user = await User.findById(req.user._id)
+
+    if (user && (await bcrypt.compare(currentPassword, user.password))) {
+      // Hash mật khẩu mới
+      const salt = await bcrypt.genSalt(10)
+      user.password = await bcrypt.hash(newPassword, salt)
+      await user.save()
+
+      res.json({ message: 'Đổi mật khẩu thành công' })
+    } else {
+      res.status(401).json({ message: 'Mật khẩu hiện tại không đúng' })
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
 module.exports = router
