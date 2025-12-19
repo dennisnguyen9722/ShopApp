@@ -18,7 +18,7 @@ function createSlug(text) {
 // 1. Lấy tất cả danh mục (Công khai)
 router.get('/', async (req, res) => {
   try {
-    const categories = await Category.find().sort({ createdAt: -1 })
+    const categories = await Category.find().sort({ createdAt: 1 })
     res.json(categories)
   } catch (err) {
     res.status(500).json({ message: err.message })

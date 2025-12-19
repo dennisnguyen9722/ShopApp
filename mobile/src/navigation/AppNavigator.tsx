@@ -8,12 +8,14 @@ import { Ionicons } from '@expo/vector-icons'
 import HomeScreen from '../screens/HomeScreen'
 import CartScreen from '../screens/CartScreen'
 import ProductDetailScreen from '../screens/ProductDetailScreen'
+import LoginScreen from '../screens/LoginScreen' // 👈 1. Import Login
+import ProfileScreen from '../screens/ProfileScreen'
 import { RootStackParamList } from '../types'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
-// 1. Tạo Tab Bar (Home + Cart)
+// 1. Tạo Tab Bar (Giữ nguyên không đổi)
 const BottomTabs = () => {
   return (
     <Tab.Navigator
@@ -43,22 +45,31 @@ const BottomTabs = () => {
         component={CartScreen}
         options={{ title: 'Giỏ hàng' }}
       />
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileScreen}
+        options={{ title: 'Tài khoản' }}
+      />
     </Tab.Navigator>
   )
 }
 
-// 2. Tạo Stack chính (Chứa Tab Bar + Các trang chi tiết)
+// 2. Sửa lại Stack chính
 const AppNavigator = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* Màn hình chính là Tab Bar */}
+    <Stack.Navigator
+      initialRouteName="Main" // 👈 2. Đặt Login làm màn hình đầu tiên
+      screenOptions={{ headerShown: false }}
+    >
       <Stack.Screen name="Main" component={BottomTabs} />
 
-      {/* Màn hình chi tiết nằm đè lên Tab Bar */}
+      {/* Màn hình Login giờ chỉ là màn hình phụ, khi nào cần mới gọi ra */}
+      <Stack.Screen name="Login" component={LoginScreen} />
+
       <Stack.Screen
         name="ProductDetail"
         component={ProductDetailScreen}
-        options={{ headerShown: true, title: 'Chi tiết sản phẩm' }}
+        options={{ headerShown: true, title: 'Chi tiết' }}
       />
     </Stack.Navigator>
   )
