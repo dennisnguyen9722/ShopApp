@@ -1,3 +1,4 @@
+// src/screens/CartScreen.tsx
 import React, { useCallback, useState } from 'react'
 import {
   View,
@@ -12,7 +13,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
-import { cartApi } from '../api/cartApi'
+import { CartService } from '../services/CartService' // 👈 Dùng Service mới
 import { formatCurrency } from '../utils/formatCurrency'
 
 export default function CartScreen({ navigation }: any) {
@@ -24,17 +25,12 @@ export default function CartScreen({ navigation }: any) {
   // Hàm load giỏ hàng
   const fetchCart = async () => {
     try {
-      const res = await cartApi.getCart()
-      if (res.data && res.data.items) {
-        setCartItems(res.data.items)
-        calculateTotal(res.data.items)
-      } else {
-        setCartItems([])
-        setTotalPrice(0)
-      }
+      // Service tự lo việc lấy từ API hay lấy từ Local
+      const items = await CartService.getCart()
+      setCartItems(items)
+      calculateTotal(items)
     } catch (error) {
-      console.log('Lỗi lấy giỏ hàng:', error)
-      // Nếu lỗi 401 (chưa login) thì set giỏ rỗng
+      console.log('Lỗi hiển thị giỏ:', error)
       setCartItems([])
     } finally {
       setLoading(false)
@@ -42,27 +38,24 @@ export default function CartScreen({ navigation }: any) {
     }
   }
 
-  // Load lại mỗi khi màn hình được focus (vào lại từ tab khác)
+  // Load lại mỗi khi vào màn hình này
   useFocusEffect(
     useCallback(() => {
       fetchCart()
     }, [])
   )
 
-  // Tính tổng tiền
   const calculateTotal = (items: any[]) => {
     const total = items.reduce((sum, item) => {
-      // Giá sản phẩm * số lượng
       return sum + (item.product?.price || 0) * item.quantity
     }, 0)
     setTotalPrice(total)
   }
 
-  // Xử lý tăng giảm số lượng
   const handleUpdateQuantity = async (item: any, newQty: number) => {
-    if (newQty < 1) return // Không cho giảm dưới 1 (muốn xóa thì bấm thùng rác)
+    if (newQty < 1) return
 
-    // Update UI tạm thời cho mượt
+    // Update UI ngay lập tức cho mượt (Optimistic Update)
     const oldItems = [...cartItems]
     const newItems = cartItems.map((i) =>
       i === item ? { ...i, quantity: newQty } : i
@@ -71,39 +64,35 @@ export default function CartScreen({ navigation }: any) {
     calculateTotal(newItems)
 
     try {
-      await cartApi.updateQuantity(item.product._id, newQty, item.variants)
+      await CartService.updateQuantity(item.product._id, newQty, item.variants)
+      // Không cần fetchCart lại cũng được vì UI đã update rồi, trừ khi muốn đồng bộ chuẩn
     } catch (error) {
-      Alert.alert('Lỗi', 'Không cập nhật được số lượng')
+      Alert.alert('Lỗi', 'Không cập nhật được')
       setCartItems(oldItems) // Revert nếu lỗi
+      calculateTotal(oldItems)
     }
   }
 
-  // Xử lý xóa sản phẩm
   const handleRemoveItem = async (item: any) => {
-    Alert.alert('Xác nhận', 'Bạn muốn xóa sản phẩm này khỏi giỏ?', [
+    Alert.alert('Xác nhận', 'Xóa sản phẩm này khỏi giỏ?', [
       { text: 'Hủy', style: 'cancel' },
       {
         text: 'Xóa',
         style: 'destructive',
         onPress: async () => {
           try {
-            const res = await cartApi.removeItem(
-              item.product._id,
-              item.variants
-            )
-            setCartItems(res.data.items)
-            calculateTotal(res.data.items)
+            await CartService.removeItem(item.product._id, item.variants)
+            fetchCart() // Load lại data sạch
           } catch (error) {
-            Alert.alert('Lỗi', 'Không xóa được sản phẩm')
+            console.log(error)
           }
         }
       }
     ])
   }
 
-  // Render từng dòng sản phẩm
   const renderItem = ({ item }: { item: any }) => {
-    // Format hiển thị Variants (VD: Màu: Đỏ | Size: L)
+    // Format text biến thể: "Màu: Đỏ | Size: L"
     const variantText = item.variants
       ? Object.entries(item.variants)
           .map(([k, v]) => `${k}: ${v}`)
@@ -112,7 +101,6 @@ export default function CartScreen({ navigation }: any) {
 
     return (
       <View style={styles.cartItem}>
-        {/* Ảnh */}
         <Image
           source={{
             uri: item.product?.image || 'https://via.placeholder.com/100'
@@ -120,7 +108,6 @@ export default function CartScreen({ navigation }: any) {
           style={styles.itemImage}
         />
 
-        {/* Thông tin */}
         <View style={styles.itemInfo}>
           <Text style={styles.itemTitle} numberOfLines={2}>
             {item.product?.title}
@@ -132,7 +119,6 @@ export default function CartScreen({ navigation }: any) {
             {formatCurrency(item.product?.price || 0)}
           </Text>
 
-          {/* Bộ điều khiển số lượng */}
           <View style={styles.qtyRow}>
             <View style={styles.qtyControl}>
               <TouchableOpacity
@@ -150,8 +136,10 @@ export default function CartScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* Nút xóa */}
-            <TouchableOpacity onPress={() => handleRemoveItem(item)}>
+            <TouchableOpacity
+              onPress={() => handleRemoveItem(item)}
+              style={{ padding: 4 }}
+            >
               <Ionicons name="trash-outline" size={20} color="#ef4444" />
             </TouchableOpacity>
           </View>
@@ -177,7 +165,7 @@ export default function CartScreen({ navigation }: any) {
       {cartItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={80} color="#ddd" />
-          <Text style={styles.emptyText}>Giỏ hàng trống trơn</Text>
+          <Text style={styles.emptyText}>Giỏ hàng đang trống</Text>
           <TouchableOpacity
             style={styles.shopNowBtn}
             onPress={() => navigation.navigate('HomeTab')}
@@ -189,7 +177,7 @@ export default function CartScreen({ navigation }: any) {
         <>
           <FlatList
             data={cartItems}
-            keyExtractor={(item, index) => item._id || index.toString()}
+            keyExtractor={(item, index) => index.toString()} // Dùng index cho chắc vì offline ID có thể fake
             renderItem={renderItem}
             contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
             refreshControl={
@@ -203,7 +191,6 @@ export default function CartScreen({ navigation }: any) {
             }
           />
 
-          {/* Footer Thanh Toán */}
           <View style={styles.footer}>
             <View>
               <Text style={styles.totalLabel}>Tổng cộng:</Text>
@@ -235,7 +222,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
 
-  // Empty State
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -252,7 +238,6 @@ const styles = StyleSheet.create({
   },
   shopNowText: { color: '#fff', fontWeight: 'bold' },
 
-  // Cart Item
   cartItem: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -269,17 +254,23 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 8,
-    backgroundColor: '#f9f9f9'
+    backgroundColor: '#f9f9f9',
+    resizeMode: 'cover'
   },
   itemInfo: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
-  itemTitle: { fontSize: 14, fontWeight: '500', color: '#333' },
-  itemVariant: { fontSize: 12, color: '#888', marginTop: 4 },
-  itemPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#4f46e5',
-    marginTop: 4
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 4
   },
+  itemVariant: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    fontStyle: 'italic'
+  },
+  itemPrice: { fontSize: 16, fontWeight: 'bold', color: '#4f46e5' },
 
   qtyRow: {
     flexDirection: 'row',
@@ -291,9 +282,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f3f4f6',
-    borderRadius: 4
+    borderRadius: 6
   },
-  qtyBtn: { padding: 4, width: 28, alignItems: 'center' },
+  qtyBtn: { padding: 6, width: 32, alignItems: 'center' },
   qtyText: {
     paddingHorizontal: 8,
     fontWeight: '600',
@@ -301,7 +292,6 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   },
 
-  // Footer
   footer: {
     position: 'absolute',
     bottom: 0,

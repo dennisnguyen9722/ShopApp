@@ -4,17 +4,53 @@ const Order = require('../models/Order')
 const { protect, checkPermission } = require('../middleware/authMiddleware')
 const PERMISSIONS = require('../config/permissions')
 
-// 1. LẤY DANH SÁCH ĐƠN HÀNG (Cần quyền VIEW)
+// 1. TẠO ĐƠN HÀNG (PUBLIC - Khách vãng lai cũng đặt được)
+router.post('/', async (req, res) => {
+  try {
+    const {
+      customer, // { name, email, phone, address }
+      items, // Array products
+      totalAmount,
+      paymentMethod,
+      note,
+      userId // Nếu app có gửi kèm ID user đã login
+    } = req.body
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: 'Giỏ hàng trống' })
+    }
+
+    if (!customer || !customer.phone || !customer.address) {
+      return res.status(400).json({ message: 'Thiếu thông tin giao hàng' })
+    }
+
+    const orderData = {
+      customer,
+      items,
+      totalAmount,
+      paymentMethod: paymentMethod || 'COD',
+      note,
+      user: userId || null // Lưu ID user nếu có
+    }
+
+    const createdOrder = await Order.create(orderData)
+    res.status(201).json(createdOrder)
+  } catch (err) {
+    console.error('Lỗi tạo đơn:', err)
+    res.status(500).json({ message: 'Lỗi server khi tạo đơn hàng' })
+  }
+})
+
+// 2. LẤY DANH SÁCH ĐƠN HÀNG (ADMIN - Cần quyền VIEW)
 router.get(
   '/',
   protect,
   checkPermission(PERMISSIONS.ORDERS.VIEW),
   async (req, res) => {
     try {
-      // Populate product để lấy thêm info nếu cần
       const orders = await Order.find()
         .populate('items.product', 'title image')
-        .sort({ createdAt: -1 }) // Mới nhất lên đầu
+        .sort({ createdAt: -1 })
       res.json(orders)
     } catch (err) {
       res.status(500).json({ message: err.message })
@@ -22,8 +58,7 @@ router.get(
   }
 )
 
-// 2. CẬP NHẬT TRẠNG THÁI (Cần quyền UPDATE_STATUS)
-// VD: Duyệt đơn, Bấm giao hàng...
+// 3. CẬP NHẬT TRẠNG THÁI (ADMIN - Cần quyền UPDATE_STATUS)
 router.put(
   '/:id/status',
   protect,
@@ -31,8 +66,6 @@ router.put(
   async (req, res) => {
     try {
       const { status } = req.body
-
-      // Validate status hợp lệ
       const validStatuses = [
         'pending',
         'confirmed',
@@ -40,6 +73,7 @@ router.put(
         'completed',
         'cancelled'
       ]
+
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: 'Trạng thái không hợp lệ' })
       }
@@ -52,23 +86,11 @@ router.put(
 
       if (!order)
         return res.status(404).json({ message: 'Không tìm thấy đơn hàng' })
-
       res.json(order)
     } catch (err) {
       res.status(500).json({ message: err.message })
     }
   }
 )
-
-// 3. API TẠO ĐƠN TEST (Để bạn có dữ liệu mà test)
-// Không cần quyền, ai gọi cũng được (để test cho lẹ)
-router.post('/dummy', async (req, res) => {
-  try {
-    const order = await Order.create(req.body)
-    res.status(201).json(order)
-  } catch (err) {
-    res.status(500).json({ message: err.message })
-  }
-})
 
 module.exports = router

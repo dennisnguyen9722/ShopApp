@@ -14,7 +14,8 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { formatCurrency } from '../utils/formatCurrency'
 import { homeApi } from '../api/homeApi'
-import { cartApi } from '../api/cartApi' // 👈 Nhớ import cartApi
+// import { cartApi } from '../api/cartApi' // 👈 Có thể bỏ cái này nếu dùng CartService hoàn toàn
+import { CartService } from '../services/CartService' // ✅ Dùng cái này
 
 const { width } = Dimensions.get('window')
 const HERO_HEIGHT = width
@@ -109,10 +110,7 @@ export default function ProductDetailScreen({ route, navigation }: any) {
 
   // --- LOGIC THÊM VÀO GIỎ ---
   const handleAddToCart = async () => {
-    // 1. Kiểm tra đăng nhập (đơn giản bằng cách check token trong storage nếu cần,
-    // hoặc để backend trả lỗi 401 rồi catch)
-
-    // 2. Kiểm tra xem đã chọn đủ biến thể chưa
+    // 1. Kiểm tra xem đã chọn đủ biến thể chưa
     if (product.groupedVariants && product.groupedVariants.length > 0) {
       const missingVariants = product.groupedVariants.filter(
         (g: any) => !selectedVariants[g.name]
@@ -127,10 +125,11 @@ export default function ProductDetailScreen({ route, navigation }: any) {
       }
     }
 
-    // 3. Gọi API
+    // 2. Gọi Service Thêm giỏ (Tự động xử lý Offline/Online)
     try {
-      // Demo số lượng = 1
-      await cartApi.addToCart(product._id, 1, selectedVariants)
+      // 👇 SỬA Ở ĐÂY: Dùng CartService thay vì cartApi
+      // Truyền cả object product để lưu offline có đủ ảnh/tên
+      await CartService.addToCart(product, 1, selectedVariants)
 
       Alert.alert('Thành công', 'Đã thêm sản phẩm vào giỏ hàng! 🛒', [
         { text: 'Ở lại đây', style: 'cancel' },
@@ -141,14 +140,7 @@ export default function ProductDetailScreen({ route, navigation }: any) {
       ])
     } catch (error: any) {
       console.log('Lỗi thêm giỏ hàng:', error)
-      if (error.response?.status === 401) {
-        Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để mua hàng', [
-          { text: 'Hủy' },
-          { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') }
-        ])
-      } else {
-        Alert.alert('Lỗi', 'Không thể thêm vào giỏ hàng lúc này')
-      }
+      Alert.alert('Lỗi', 'Không thể thêm vào giỏ hàng lúc này')
     }
   }
 
@@ -461,7 +453,7 @@ const styles = StyleSheet.create({
   },
 
   /* Variant Styles */
-  // 👇 ĐÃ BỔ SUNG variantSection Ở ĐÂY
+  // 👇 ĐÃ CÓ variantSection (Code bạn gửi đã ok phần này)
   variantSection: { marginBottom: 16 },
   variantLabel: {
     fontSize: 14,
