@@ -1,45 +1,57 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
-  ActivityIndicator,
-  TextInput,
-  RefreshControl,
+  FlatList,
   Image,
-  ScrollView,
+  TouchableOpacity,
   StatusBar,
-  TouchableOpacity
+  TextInput,
+  ActivityIndicator,
+  Dimensions,
+  RefreshControl
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { SvgUri } from 'react-native-svg' // 👈 Import thư viện SVG
 import { homeApi } from '../api/homeApi'
 import ProductItem from '../components/ProductItem'
 
-export default function HomeScreen({ navigation }: any) {
-  // 1. State chứa dữ liệu thật
-  const [products, setProducts] = useState<any[]>([])
-  const [categories, setCategories] = useState<any[]>([])
-  const [banners, setBanners] = useState<any[]>([])
+const { width } = Dimensions.get('window')
 
+/* ==================== THEME ==================== */
+const COLORS = {
+  primary: '#3F3A5F',
+  accent: '#F59E0B',
+  bg: '#F6F5F9',
+  surface: '#FFFFFF',
+  text: '#1F2937',
+  sub: '#6B7280',
+  border: '#E5E7EB'
+}
+
+export default function HomeScreen({ navigation }: any) {
+  const [products, setProducts] = useState<any[]>([])
+  const [banners, setBanners] = useState<any[]>([])
+  const [categories, setCategories] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [activeBanner, setActiveBanner] = useState(0)
 
-  // 2. Hàm gọi API
+  const bannerRef = useRef<FlatList>(null)
+
   const fetchData = async () => {
     try {
-      const [resProducts, resCats, resBanners] = await Promise.all([
+      const [resProducts, resBanners, resCategories] = await Promise.all([
         homeApi.getProducts(),
-        homeApi.getCategories(),
-        homeApi.getBanners()
+        homeApi.getBanners(),
+        homeApi.getCategories()
       ])
 
-      setProducts(resProducts.data.products || resProducts.data)
-      setCategories(resCats.data || [])
+      setProducts(resProducts.data.products || resProducts.data || [])
       setBanners(resBanners.data || [])
-    } catch (error) {
-      console.error('Lỗi tải trang chủ:', error)
+      setCategories(resCategories.data || [])
+    } catch (e) {
+      console.log(e)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -50,231 +62,303 @@ export default function HomeScreen({ navigation }: any) {
     fetchData()
   }, [])
 
-  const onRefresh = () => {
-    setRefreshing(true)
-    fetchData()
+  /* ==================== AUTO SLIDE ==================== */
+  useEffect(() => {
+    if (!banners.length) return
+
+    const timer = setInterval(() => {
+      const next = (activeBanner + 1) % banners.length
+      bannerRef.current?.scrollToIndex({
+        index: next,
+        animated: true
+      })
+      setActiveBanner(next)
+    }, 4000)
+
+    return () => clearInterval(timer)
+  }, [activeBanner, banners.length])
+
+  /* ==================== HERO BANNER ==================== */
+  const Hero = () => {
+    if (!banners.length) return null
+
+    return (
+      <View style={styles.heroWrap}>
+        <FlatList
+          ref={bannerRef}
+          data={banners}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => item._id}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / width)
+            setActiveBanner(index)
+          }}
+          renderItem={({ item }) => (
+            <Image source={{ uri: item.image }} style={styles.heroImage} />
+          )}
+        />
+
+        {/* DOT INDICATOR */}
+        <View style={styles.dotWrap}>
+          {banners.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i === activeBanner && styles.dotActive]}
+            />
+          ))}
+        </View>
+      </View>
+    )
   }
 
-  // --- Header Component ---
-  const ListHeader = () => (
-    <View style={{ marginBottom: 10 }}>
-      {/* 1. Banner Quảng Cáo */}
-      {banners.length > 0 ? (
-        <View style={styles.bannerContainer}>
-          <Image
-            source={{ uri: banners[0]?.image }}
-            style={styles.bannerImage}
-            resizeMode="cover"
-          />
-        </View>
-      ) : (
-        // Placeholder nếu chưa có banner
-        <View style={[styles.bannerContainer, styles.bannerPlaceholder]}>
-          <Text style={{ color: '#6366f1', fontWeight: 'bold' }}>
-            SuperMall Xin Chào! 👋
-          </Text>
-        </View>
+  /* ==================== CATEGORIES ==================== */
+  const Categories = () => (
+    <FlatList
+      data={categories}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyExtractor={(item) => item._id}
+      contentContainerStyle={styles.categoryList}
+      renderItem={({ item }) => (
+        <TouchableOpacity style={styles.categoryChip}>
+          <Text style={styles.categoryText}>{item.name}</Text>
+        </TouchableOpacity>
       )}
+    />
+  )
 
-      {/* 2. Danh mục (Hỗ trợ SVG & PNG) */}
-      <View style={styles.catContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {categories.map((cat: any, index) => {
-            // Kiểm tra đuôi file để chọn cách render
-            const isSvg = cat.image?.toLowerCase().endsWith('.svg')
-
-            return (
-              <TouchableOpacity key={cat._id || index} style={styles.catItem}>
-                <View style={[styles.catIcon, { backgroundColor: '#e0f2fe' }]}>
-                  {cat.image ? (
-                    isSvg ? (
-                      // Render SVG
-                      <SvgUri width="60%" height="60%" uri={cat.image} />
-                    ) : (
-                      // Render Ảnh thường (PNG/JPG)
-                      <Image
-                        source={{ uri: cat.image }}
-                        style={{ width: '60%', height: '60%' }}
-                        resizeMode="contain"
-                      />
-                    )
-                  ) : (
-                    // Render Icon mặc định nếu không có ảnh
-                    <Ionicons name="grid-outline" size={24} color="#333" />
-                  )}
-                </View>
-                <Text style={styles.catName} numberOfLines={2}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
+  /* ==================== DEAL ==================== */
+  const HighlightDeal = () => (
+    <View style={styles.dealWrap}>
+      <View>
+        <Text style={styles.dealTitle}>Deal nổi bật hôm nay</Text>
+        <Text style={styles.dealSub}>Số lượng có hạn</Text>
       </View>
 
-      {/* Tiêu đề Section */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Gợi ý hôm nay 🔥</Text>
-        <Text style={styles.seeMore}>Xem tất cả</Text>
+      <View style={styles.dealPriceBox}>
+        <Text style={styles.dealPrice}>-25%</Text>
       </View>
     </View>
+  )
+
+  const ListHeader = () => (
+    <>
+      <Hero />
+      <Categories />
+      <HighlightDeal />
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Gợi ý cho bạn</Text>
+        <Text style={styles.sectionLink}>Xem tất cả</Text>
+      </View>
+    </>
   )
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#4f46e5" />
+      <StatusBar barStyle="dark-content" />
 
-      {/* Header Search Cố định */}
+      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color="#888" />
+          <Ionicons name="search" size={18} color={COLORS.sub} />
           <TextInput
-            placeholder="Tìm kiếm sản phẩm..."
-            placeholderTextColor="#999"
+            placeholder="Tìm kiếm sản phẩm"
+            placeholderTextColor={COLORS.sub}
             style={styles.searchInput}
           />
         </View>
+
         <TouchableOpacity style={styles.cartBtn}>
-          <Ionicons name="cart-outline" size={26} color="#fff" />
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>0</Text>
-          </View>
+          <Ionicons name="cart-outline" size={24} color={COLORS.text} />
         </TouchableOpacity>
       </View>
 
-      {/* Body */}
-      <View style={styles.body}>
-        {loading ? (
-          <ActivityIndicator
-            size="large"
-            color="#4f46e5"
-            style={{ marginTop: 50 }}
-          />
-        ) : (
-          <FlatList
-            data={products}
-            keyExtractor={(item: any) => item._id}
-            renderItem={({ item }) => (
-              <ProductItem
-                product={item}
-                onPress={() =>
-                  navigation.navigate('ProductDetail', { id: item._id })
-                }
-              />
-            )}
-            numColumns={2}
-            columnWrapperStyle={styles.columnWrapper}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#4f46e5']}
-              />
-            }
-            ListHeaderComponent={ListHeader}
-          />
-        )}
-      </View>
+      {/* BODY */}
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 100 }} size="large" />
+      ) : (
+        <FlatList
+          data={products}
+          keyExtractor={(item) => item._id}
+          numColumns={2}
+          columnWrapperStyle={styles.column}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          renderItem={({ item }) => (
+            <ProductItem
+              product={item}
+              onPress={() =>
+                navigation.navigate('ProductDetail', { id: item._id })
+              }
+            />
+          )}
+          ListHeaderComponent={ListHeader}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
+          }
+        />
+      )}
     </View>
   )
 }
 
+/* ==================== STYLES ==================== */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f4f6' },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.bg
+  },
 
-  // Header Style
+  /* HEADER */
   header: {
-    backgroundColor: '#4f46e5',
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingTop: 52,
     paddingHorizontal: 16,
+    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    zIndex: 10,
-    shadowColor: '#4f46e5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8
+    gap: 12
   },
+
   searchBar: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 25,
+    height: 44,
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    height: 42
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border
   },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 14 },
-  cartBtn: { position: 'relative' },
-  badge: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#ef4444',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#4f46e5'
+
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.text
   },
-  badgeText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
 
-  // Body
-  body: { flex: 1 },
-  listContent: { padding: 16, paddingBottom: 100 },
-  columnWrapper: { justifyContent: 'space-between' },
+  cartBtn: {
+    padding: 6
+  },
 
-  // Banner
-  bannerContainer: {
-    width: '100%',
-    height: 150,
-    borderRadius: 16,
-    overflow: 'hidden',
+  /* HERO */
+  heroWrap: {
+    marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 20
+    borderRadius: 24,
+    overflow: 'hidden',
+    aspectRatio: 16 / 9
   },
-  bannerPlaceholder: {
-    backgroundColor: '#e0e7ff',
+
+  heroImage: {
+    width,
+    height: '100%',
+    resizeMode: 'contain'
+  },
+
+  dotWrap: {
+    position: 'absolute',
+    bottom: 10,
+    width: '100%',
+    flexDirection: 'row',
     justifyContent: 'center',
+    gap: 6
+  },
+
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D1D5DB'
+  },
+
+  dotActive: {
+    backgroundColor: COLORS.primary,
+    width: 14
+  },
+
+  /* CATEGORY */
+  categoryList: {
+    paddingHorizontal: 16,
+    marginTop: 20
+  },
+
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 999,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border
+  },
+
+  categoryText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.text
+  },
+
+  /* DEAL */
+  dealWrap: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center'
   },
-  bannerImage: { width: '100%', height: '100%' },
 
-  // Categories
-  catContainer: { marginBottom: 24 },
-  catItem: { alignItems: 'center', marginRight: 16, width: 70 }, // Tăng width để text không bị cắt
-  catIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-    overflow: 'hidden' // Để ảnh không lòi ra ngoài vòng tròn
+  dealTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text
   },
-  catName: {
+
+  dealSub: {
     fontSize: 12,
-    color: '#444',
-    textAlign: 'center',
-    lineHeight: 16
+    color: COLORS.sub,
+    marginTop: 2
   },
 
-  // Section Header
+  dealPriceBox: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14
+  },
+
+  dealPrice: {
+    fontWeight: '700'
+  },
+
+  /* PRODUCT */
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 12
   },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f2937' },
-  seeMore: { fontSize: 13, color: '#4f46e5', fontWeight: '600' }
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text
+  },
+
+  sectionLink: {
+    fontSize: 13,
+    color: COLORS.sub
+  },
+
+  column: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 16
+  }
 })
