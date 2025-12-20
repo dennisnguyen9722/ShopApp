@@ -3,7 +3,7 @@ const router = express.Router()
 const Product = require('../models/Product')
 const { protect, adminOnly } = require('../middleware/authMiddleware')
 
-// Hàm tạo slug (giữ nguyên của bạn)
+// Hàm tạo slug
 function createSlug(text) {
   return text
     .toString()
@@ -26,6 +26,7 @@ router.get('/', async (req, res) => {
     if (search) filter.title = { $regex: search, $options: 'i' }
 
     const products = await Product.find(filter)
+      .populate('brand', 'name image') // 👇 MỚI: Lấy thêm thông tin brand
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 })
@@ -46,7 +47,11 @@ router.get('/', async (req, res) => {
 // 2. GET BY ID
 router.get('/:id', async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
+    const product = await Product.findById(req.params.id).populate(
+      'brand',
+      'name image'
+    ) // 👇 MỚI: Populate brand ở chi tiết luôn
+
     if (!product)
       return res.status(404).json({ message: 'Không tìm thấy sản phẩm' })
     res.json(product)
@@ -55,10 +60,9 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// 3. POST: Thêm sản phẩm mới (Đã cập nhật nhận full trường)
+// 3. POST: Thêm sản phẩm mới
 router.post('/', protect, async (req, res) => {
   try {
-    // 👇 Lấy thêm originalPrice, content, variants từ Frontend gửi lên
     const {
       title,
       price,
@@ -66,9 +70,10 @@ router.post('/', protect, async (req, res) => {
       description,
       content,
       category,
+      brand, // 👈 LẤY BRAND TỪ BODY
       image,
       variants,
-      specs // <--- LẤY THÊM SPECS
+      specs
     } = req.body
 
     if (!title || !price) {
@@ -90,9 +95,10 @@ router.post('/', protect, async (req, res) => {
       description,
       content,
       category,
+      brand, // 👈 LƯU VÀO DB
       image,
       variants,
-      specs // <--- LƯU VÀO DB
+      specs
     })
 
     const newProduct = await product.save()
@@ -105,11 +111,11 @@ router.post('/', protect, async (req, res) => {
 // 4. PUT: Cập nhật sản phẩm
 router.put('/:id', protect, async (req, res) => {
   try {
-    // 👇 Nếu người dùng sửa Tên sản phẩm, ta phải tạo lại Slug mới
     if (req.body.title) {
       req.body.slug = createSlug(req.body.title)
     }
 
+    // findByIdAndUpdate sẽ tự động cập nhật trường 'brand' nếu có trong req.body
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true

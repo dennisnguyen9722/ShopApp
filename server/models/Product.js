@@ -18,7 +18,7 @@ const specSchema = new mongoose.Schema(
     v: String // Value (VD: "OLED 6.7 inch, 120Hz")
   },
   { _id: false }
-) // Không cần ID cho dòng này
+)
 
 const productSchema = new mongoose.Schema(
   {
@@ -33,12 +33,16 @@ const productSchema = new mongoose.Schema(
     content: String,
 
     category: { type: String },
+
+    // 👇 MỚI: Liên kết với bảng Brand
+    brand: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand' },
+
     image: { type: String },
 
-    // ✨ MỚI: Mảng thông số kỹ thuật (Dynamic)
+    // Mảng thông số kỹ thuật (Dynamic)
     specs: [specSchema],
 
-    // ✨ MỚI: Biến thể theo kiểu công nghệ
+    // Biến thể theo kiểu công nghệ
     variants: [variantSchema]
   },
   { timestamps: true }
