@@ -10,12 +10,15 @@ import {
   Package,
   Loader2,
   Image as ImageIcon,
-  Smartphone
+  Smartphone,
+  ChevronLeft,
+  ChevronRight,
+  Search
 } from 'lucide-react'
 
-// UI Components
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input' // Thêm Input tìm kiếm nếu thích
 import {
   Card,
   CardContent,
@@ -32,8 +35,6 @@ import {
   TableRow
 } from '@/components/ui/table'
 import { toast } from 'sonner'
-
-// Import Component Form vừa tách
 import { ProductForm, ProductFormData } from '@/components/ProductForm'
 
 export default function ProductsPage() {
@@ -42,34 +43,53 @@ export default function ProductsPage() {
   const [brands, setBrands] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  // State điều khiển Modal Form
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalProducts, setTotalProducts] = useState(0)
+
+  // Modal
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any | null>(null)
 
-  // 1. FETCH DATA
-  const fetchData = async () => {
+  // 1. FETCH METADATA
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      try {
+        const [resCategories, resBrands] = await Promise.all([
+          axiosClient.get('/categories'),
+          axiosClient.get('/brands')
+        ])
+        setCategories(resCategories.data || [])
+        setBrands(resBrands.data || [])
+      } catch (error) {
+        console.error('Lỗi tải metadata', error)
+      }
+    }
+    fetchMetadata()
+  }, [])
+
+  // 2. FETCH PRODUCTS
+  const fetchProducts = async (page: number) => {
     setLoading(true)
     try {
-      const [resProducts, resCategories, resBrands] = await Promise.all([
-        axiosClient.get('/products'),
-        axiosClient.get('/categories'),
-        axiosClient.get('/brands')
-      ])
-      setProducts(resProducts.data.products || [])
-      setCategories(resCategories.data || [])
-      setBrands(resBrands.data || [])
+      const { data } = await axiosClient.get(`/products?page=${page}&limit=10`)
+      setProducts(data.products || [])
+      setTotalPages(data.totalPages || 1)
+      setTotalProducts(data.total || 0)
+      setCurrentPage(data.currentPage || 1)
     } catch (error) {
-      toast.error('Lỗi tải dữ liệu')
+      toast.error('Lỗi tải danh sách')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchProducts(currentPage)
+  }, [currentPage])
 
-  // 2. LOGIC MỞ MODAL
+  // Handlers
   const handleAddNew = () => {
     setEditingProduct(null)
     setIsDialogOpen(true)
@@ -80,38 +100,31 @@ export default function ProductsPage() {
     setIsDialogOpen(true)
   }
 
-  // 3. LOGIC SUBMIT (TỪ FORM GỬI LÊN)
   const handleFormSubmit = async (formData: ProductFormData) => {
     try {
       if (editingProduct) {
-        // UPDATE
         await axiosClient.put(`/products/${editingProduct._id}`, formData)
         toast.success('Cập nhật thành công!')
       } else {
-        // CREATE
         await axiosClient.post('/products', formData)
         toast.success('Thêm mới thành công!')
+        setCurrentPage(1)
       }
       setIsDialogOpen(false)
-      fetchData() // Load lại bảng
+      fetchProducts(currentPage)
     } catch (error: any) {
-      toast.error('Thất bại', {
-        description: error.response?.data?.message || 'Có lỗi xảy ra'
-      })
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra')
     }
   }
 
-  // 4. LOGIC DELETE
   const handleDelete = async (id: string) => {
-    if (!confirm('Bạn có chắc muốn xóa sản phẩm này?')) return
+    if (!confirm('Bạn có chắc muốn xóa?')) return
     try {
       await axiosClient.delete(`/products/${id}`)
       toast.success('Đã xóa sản phẩm')
-      fetchData()
+      fetchProducts(currentPage)
     } catch (error: any) {
-      toast.error('Không thể xóa', {
-        description: error.response?.data?.message
-      })
+      toast.error('Không thể xóa')
     }
   }
 
@@ -122,107 +135,146 @@ export default function ProductsPage() {
     }).format(amount)
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-sm border-none bg-white">
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <div>
-            <CardTitle className="text-2xl font-bold flex items-center gap-2">
-              <Smartphone className="w-6 h-6 text-indigo-600" /> Quản Lý Sản
-              Phẩm
-            </CardTitle>
-            <CardDescription>
-              Quản lý điện thoại, máy tính bảng, laptop...
-            </CardDescription>
-          </div>
-
+    <div className="space-y-6 max-w-[1400px] mx-auto p-4 sm:p-6">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+            Quản Lý Sản Phẩm
+            <Badge
+              variant="secondary"
+              className="text-sm font-normal px-2 py-0.5 bg-indigo-50 text-indigo-700"
+            >
+              {totalProducts}
+            </Badge>
+          </h1>
+          <p className="text-slate-500 mt-1">
+            Quản lý kho hàng, giá cả và biến thể sản phẩm.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {/* Nếu thích có thể thêm ô tìm kiếm ở đây */}
           <Button
             onClick={handleAddNew}
-            className="bg-indigo-600 hover:bg-indigo-700"
+            className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-all"
           >
             <Plus className="mr-2 h-4 w-4" /> Thêm Sản Phẩm
           </Button>
-        </CardHeader>
+        </div>
+      </div>
 
-        <CardContent>
-          <div className="rounded-md border">
+      <Card className="shadow-sm border-slate-200 bg-white overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-slate-50/75">
                 <TableRow>
-                  <TableHead className="w-[80px]">Ảnh</TableHead>
-                  <TableHead>Tên Thiết Bị</TableHead>
-                  <TableHead>Giá (Từ)</TableHead>
-                  <TableHead className="text-center">Danh mục</TableHead>
-                  <TableHead className="text-center">Phiên bản</TableHead>
-                  <TableHead className="text-center w-[100px]">
+                  <TableHead className="w-[80px] py-4 pl-6">Ảnh</TableHead>
+                  <TableHead className="py-4 font-semibold text-slate-700">
+                    Tên Thiết Bị
+                  </TableHead>
+                  <TableHead className="py-4 font-semibold text-slate-700">
+                    Giá (Từ)
+                  </TableHead>
+                  <TableHead className="text-center py-4 font-semibold text-slate-700">
+                    Danh mục
+                  </TableHead>
+                  <TableHead className="text-center py-4 font-semibold text-slate-700">
+                    Thương hiệu
+                  </TableHead>
+                  <TableHead className="text-center py-4 font-semibold text-slate-700">
+                    Phiên bản
+                  </TableHead>
+                  <TableHead className="text-right py-4 pr-6 font-semibold text-slate-700">
                     Thao tác
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center">
-                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-400" />
-                    </TableCell>
-                  </TableRow>
+                  [...Array(5)].map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={7} className="h-20 text-center">
+                        <Loader2 className="mx-auto animate-spin text-slate-300" />
+                      </TableCell>
+                    </TableRow>
+                  ))
                 ) : products.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
-                      className="h-32 text-center text-gray-500"
+                      colSpan={7}
+                      className="h-64 text-center text-slate-500"
                     >
-                      <div className="flex flex-col items-center gap-2">
-                        <Package className="h-10 w-10 text-gray-300" />
-                        <p>Chưa có sản phẩm nào</p>
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
+                          <Package className="h-8 w-8 text-slate-400" />
+                        </div>
+                        <p className="font-medium">Chưa có sản phẩm nào</p>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
                   products.map((p) => (
-                    <TableRow key={p._id}>
-                      <TableCell>
-                        <div className="w-12 h-12 rounded-md border bg-gray-50 flex items-center justify-center overflow-hidden">
+                    <TableRow
+                      key={p._id}
+                      className="hover:bg-slate-50/60 transition-colors group"
+                    >
+                      <TableCell className="pl-6 py-3">
+                        <div className="w-14 h-14 rounded-lg border bg-white flex items-center justify-center overflow-hidden shadow-sm">
                           {p.image ? (
                             <img
                               src={p.image}
-                              className="w-full h-full object-contain"
+                              className="w-full h-full object-contain p-1"
                             />
                           ) : (
-                            <ImageIcon className="w-6 h-6 text-gray-300" />
+                            <ImageIcon className="w-6 h-6 text-slate-300" />
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium text-gray-900">
-                        {p.title}
+                      <TableCell className="font-medium text-slate-900 py-3">
+                        <div
+                          className="line-clamp-2 max-w-[300px]"
+                          title={p.title}
+                        >
+                          {p.title}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-indigo-600 font-semibold">
+                      <TableCell className="text-indigo-600 font-bold py-3">
                         {formatCurrency(p.price)}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="capitalize">
+                      <TableCell className="text-center py-3">
+                        <Badge
+                          variant="secondary"
+                          className="capitalize bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        >
                           {p.category}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline">
-                          {p.variants?.length || 0} bản
-                        </Badge>
+                      <TableCell className="text-center py-3">
+                        <span className="text-sm font-medium text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 shadow-sm inline-block min-w-[60px]">
+                          {typeof p.brand === 'object' ? p.brand?.name : 'N/A'}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
+                      <TableCell className="text-center py-3">
+                        <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                          {p.variants?.length || 0}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right pr-6 py-3">
+                        <div className="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 hover:text-blue-600 hover:bg-blue-50"
                             onClick={() => handleEdit(p)}
+                            className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 hover:text-red-600 hover:bg-red-50"
                             onClick={() => handleDelete(p._id)}
+                            className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -234,10 +286,40 @@ export default function ProductsPage() {
               </TableBody>
             </Table>
           </div>
+
+          {/* 👇 PHÂN TRANG: Đã làm đẹp và gom nhóm */}
+          <div className="border-t bg-slate-50/50 p-4 flex items-center justify-end gap-6">
+            <span className="text-sm text-slate-500 font-medium">
+              Trang{' '}
+              <span className="text-slate-900 font-bold">{currentPage}</span>{' '}
+              trên {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1 || loading}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages || loading}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Gọi Component Form ở đây */}
       <ProductForm
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}

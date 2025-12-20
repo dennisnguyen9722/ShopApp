@@ -7,14 +7,8 @@ const PERMISSIONS = require('../config/permissions')
 // 1. TẠO ĐƠN HÀNG (PUBLIC - Khách vãng lai cũng đặt được)
 router.post('/', async (req, res) => {
   try {
-    const {
-      customer, // { name, email, phone, address }
-      items, // Array products
-      totalAmount,
-      paymentMethod,
-      note,
-      userId // Nếu app có gửi kèm ID user đã login
-    } = req.body
+    const { customer, items, totalAmount, paymentMethod, note, userId } =
+      req.body
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'Giỏ hàng trống' })
@@ -30,10 +24,29 @@ router.post('/', async (req, res) => {
       totalAmount,
       paymentMethod: paymentMethod || 'COD',
       note,
-      user: userId || null // Lưu ID user nếu có
+      user: userId || null
     }
 
     const createdOrder = await Order.create(orderData)
+
+    // 🔥 REAL-TIME NOTIFICATION CODE 🔥
+    // Lấy instance socket.io từ app (cần config app.set('io', io) bên server.js)
+    const io = req.app.get('io')
+
+    if (io) {
+      io.emit('new_order', {
+        orderId: createdOrder._id,
+        orderCode: createdOrder._id.toString().slice(-6).toUpperCase(), // Giả lập mã đơn ngắn
+        totalPrice: new Intl.NumberFormat('vi-VN', {
+          style: 'currency',
+          currency: 'VND'
+        }).format(createdOrder.totalAmount),
+        customerName: customer.name
+      })
+      console.log('📢 Đã bắn thông báo new_order')
+    }
+    // 🔥 END REAL-TIME 🔥
+
     res.status(201).json(createdOrder)
   } catch (err) {
     console.error('Lỗi tạo đơn:', err)

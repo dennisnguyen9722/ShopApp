@@ -35,7 +35,6 @@ const ProductCard: React.FC<Props> = ({ product, onPress }) => {
       activeOpacity={0.85}
       onPress={onPress}
     >
-      {/* IMAGE */}
       <View style={styles.imageWrap}>
         <Image
           source={{ uri: product.image }}
@@ -43,15 +42,17 @@ const ProductCard: React.FC<Props> = ({ product, onPress }) => {
           resizeMode="contain"
         />
 
-        {/* Wishlist */}
         <TouchableOpacity style={styles.heart}>
           <Ionicons name="heart-outline" size={18} color={COLORS.sub} />
         </TouchableOpacity>
       </View>
 
-      {/* INFO */}
       <View style={styles.info}>
-        <Text style={styles.category}>{product.category}</Text>
+        {product.category ? (
+          <Text style={styles.category} numberOfLines={1}>
+            {product.category}
+          </Text>
+        ) : null}
 
         <Text style={styles.title} numberOfLines={2}>
           {product.title}
@@ -80,21 +81,17 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     overflow: 'hidden'
   },
-
   imageWrap: {
-    height: 150,
-    padding: 14,
+    height: 160,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FAFAFB',
     position: 'relative'
   },
-
   image: {
-    width: '100%',
-    height: '100%'
+    width: '90%',
+    height: '90%'
   },
-
   heart: {
     position: 'absolute',
     top: 10,
@@ -108,11 +105,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border
   },
-
-  info: {
-    padding: 12
-  },
-
+  info: { padding: 12 },
   category: {
     fontSize: 10,
     color: COLORS.sub,
@@ -120,7 +113,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 4
   },
-
   title: {
     fontSize: 14,
     fontWeight: '600',
@@ -128,26 +120,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     height: 40
   },
-
   bottomRow: {
     marginTop: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-
   price: {
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.primary
   },
-
   rating: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4
   },
-
   ratingText: {
     fontSize: 12,
     color: COLORS.sub,

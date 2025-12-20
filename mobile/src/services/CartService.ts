@@ -3,13 +3,29 @@ import { cartApi } from '../api/cartApi'
 
 const CART_KEY = 'supermall_local_cart'
 
+// 👇 Danh sách những nơi đang "hóng" sự thay đổi của giỏ hàng
+let listeners: Array<() => void> = []
+
 export const CartService = {
-  // 1. Lấy giỏ hàng (Tự động chọn Online hoặc Offline)
+  // --- CƠ CHẾ EVENT EMITTER (MỚI THÊM) ---
+  // Gọi hàm này để thông báo cho toàn bộ app biết giỏ hàng đã đổi
+  emitChange: () => {
+    listeners.forEach((listener) => listener())
+  },
+
+  // Các màn hình dùng hàm này để đăng ký lắng nghe
+  onChange: (listener: () => void) => {
+    listeners.push(listener)
+    // Trả về hàm huỷ đăng ký (cleanup)
+    return () => {
+      listeners = listeners.filter((l) => l !== listener)
+    }
+  },
+  // ----------------------------------------
+
   getCart: async () => {
     const token = await AsyncStorage.getItem('token')
-
     if (token) {
-      // ✅ Đã đăng nhập: Gọi API Server
       try {
         const res = await cartApi.getCart()
         return res.data.items || []
@@ -17,24 +33,25 @@ export const CartService = {
         return []
       }
     } else {
-      // 🚀 Khách vãng lai: Lấy từ bộ nhớ máy
       const jsonValue = await AsyncStorage.getItem(CART_KEY)
       return jsonValue != null ? JSON.parse(jsonValue) : []
     }
   },
 
-  // 2. Thêm vào giỏ
+  // Đếm tổng số lượng item để hiển thị lên Badge
+  getCartCount: async () => {
+    const items = await CartService.getCart()
+    return items.reduce((total: number, item: any) => total + item.quantity, 0)
+  },
+
   addToCart: async (product: any, quantity: number, variants: any) => {
     const token = await AsyncStorage.getItem('token')
+    let cart = []
 
     if (token) {
-      // ✅ Online
-      return await cartApi.addToCart(product._id, quantity, variants)
+      await cartApi.addToCart(product._id, quantity, variants)
     } else {
-      // 🚀 Offline: Tự xử lý logic thêm/cộng dồn
-      let cart = await CartService.getCart()
-
-      // Tìm xem món này (cùng ID + cùng variants) đã có chưa
+      cart = await CartService.getCart()
       const existingIndex = cart.findIndex(
         (item: any) =>
           item.product._id === product._id &&
@@ -44,58 +61,47 @@ export const CartService = {
       if (existingIndex > -1) {
         cart[existingIndex].quantity += quantity
       } else {
-        cart.push({
-          product: product, // Lưu nguyên cục info sản phẩm vào để hiển thị
-          quantity,
-          variants
-        })
+        cart.push({ product, quantity, variants })
       }
-
       await AsyncStorage.setItem(CART_KEY, JSON.stringify(cart))
-      return cart
     }
+
+    // 👇 QUAN TRỌNG: Thông báo thay đổi sau khi thêm xong
+    CartService.emitChange()
+    return cart
   },
 
-  // 3. Cập nhật số lượng
   updateQuantity: async (
     productId: string,
     quantity: number,
     variants: any
   ) => {
     const token = await AsyncStorage.getItem('token')
-
     if (token) {
-      return await cartApi.updateQuantity(productId, quantity, variants)
+      await cartApi.updateQuantity(productId, quantity, variants)
     } else {
-      let cart = await CartService.getCart()
-
+      const cart = await CartService.getCart()
       const index = cart.findIndex(
         (item: any) =>
           item.product._id === productId &&
           JSON.stringify(item.variants) === JSON.stringify(variants)
       )
-
       if (index > -1) {
-        if (quantity > 0) {
-          cart[index].quantity = quantity
-        } else {
-          cart.splice(index, 1) // Xóa luôn nếu số lượng <= 0
-        }
+        if (quantity > 0) cart[index].quantity = quantity
+        else cart.splice(index, 1)
         await AsyncStorage.setItem(CART_KEY, JSON.stringify(cart))
       }
-      return { data: { items: cart } } // Trả về cấu trúc giả lập giống API
     }
+    // 👇 Thông báo thay đổi
+    CartService.emitChange()
   },
 
-  // 4. Xóa sản phẩm
   removeItem: async (productId: string, variants: any) => {
     const token = await AsyncStorage.getItem('token')
-
     if (token) {
-      return await cartApi.removeItem(productId, variants)
+      await cartApi.removeItem(productId, variants)
     } else {
       let cart = await CartService.getCart()
-
       cart = cart.filter(
         (item: any) =>
           !(
@@ -103,18 +109,17 @@ export const CartService = {
             JSON.stringify(item.variants) === JSON.stringify(variants)
           )
       )
-
       await AsyncStorage.setItem(CART_KEY, JSON.stringify(cart))
-      return { data: { items: cart } }
     }
+    // 👇 Thông báo thay đổi
+    CartService.emitChange()
   },
 
-  // 5. Xóa sạch giỏ (Dùng khi đặt hàng xong)
   clearCart: async () => {
     const token = await AsyncStorage.getItem('token')
-    if (!token) {
-      await AsyncStorage.removeItem(CART_KEY)
-    }
-    // Nếu Online thì API đặt hàng xong backend tự xóa hoặc mình gọi API clear (tuỳ logic)
+    if (!token) await AsyncStorage.removeItem(CART_KEY)
+
+    // 👇 Thông báo thay đổi
+    CartService.emitChange()
   }
 }

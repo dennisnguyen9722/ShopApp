@@ -12,6 +12,7 @@ import ProductDetailScreen from '../screens/ProductDetailScreen'
 import LoginScreen from '../screens/LoginScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import CheckoutScreen from '../screens/CheckoutScreen'
+import CategoryDetailScreen from '../screens/CategoryDetailScreen'
 
 import { RootStackParamList } from '../types'
 
@@ -117,7 +118,8 @@ const AppNavigator = () => {
           headerTintColor: '#FFF',
           headerTitleStyle: {
             fontWeight: '600'
-          }
+          },
+          headerBackVisible: false
         }}
       />
       <Stack.Screen
@@ -133,6 +135,17 @@ const AppNavigator = () => {
           headerTitleStyle: {
             fontWeight: '600'
           }
+        }}
+      />
+      <Stack.Screen
+        name="CategoryDetail"
+        component={CategoryDetailScreen}
+        options={{
+          title: 'Danh mục', // Mặc định, sau đó trong màn hình sẽ set lại theo tên
+          headerStyle: { backgroundColor: '#5B50F5' }, // Màu tím
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '600' },
+          headerBackTitle: '' // 👈 Ẩn chữ Main/Back, chỉ hiện mũi tên
         }}
       />
     </Stack.Navigator>

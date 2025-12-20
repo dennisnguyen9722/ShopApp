@@ -8,7 +8,9 @@ import {
   Image as ImageIcon,
   X,
   MoreHorizontal,
-  UploadCloud
+  UploadCloud,
+  Save,
+  Check
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -17,17 +19,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
-import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter
@@ -46,8 +39,9 @@ import {
   PopoverTrigger
 } from '@/components/ui/popover'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils' // Đảm bảo bạn có util này (thường mặc định của shadcn)
 
-// --- TYPES (Export để file cha dùng) ---
+// --- TYPES ---
 export interface TechVariant {
   ram: string
   storage: string
@@ -68,7 +62,7 @@ export interface ProductFormData {
   originalPrice: number
   price: number
   category: string
-  brand: string // Luôn lưu ID brand dưới dạng string
+  brand: string
   image: string
   description: string
   content: string
@@ -79,7 +73,7 @@ export interface ProductFormData {
 interface ProductFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initialData: any | null // Dữ liệu sản phẩm cần sửa (nếu có)
+  initialData: any | null
   categories: any[]
   brands: any[]
   onSubmit: (data: ProductFormData) => Promise<void>
@@ -124,12 +118,10 @@ export function ProductForm({
   })
   const [tempSpec, setTempSpec] = useState<TechSpec>({ k: '', v: '' })
 
-  // --- EFFECT: LOAD DATA KHI MỞ FORM SỬA ---
+  // Load Data
   useEffect(() => {
     if (open) {
       if (initialData) {
-        // 🔥 FIX LỖI MẤT THƯƠNG HIỆU:
-        // Kiểm tra xem brand là object (đã populate) hay string ID
         const brandId =
           initialData.brand && typeof initialData.brand === 'object'
             ? initialData.brand._id
@@ -138,17 +130,17 @@ export function ProductForm({
         setFormData({
           ...defaultForm,
           ...initialData,
-          brand: brandId, // Luôn ép về string ID để Select nhận diện
+          brand: brandId,
           specs: initialData.specs || [],
           variants: initialData.variants || []
         })
       } else {
-        setFormData(defaultForm) // Reset form khi thêm mới
+        setFormData(defaultForm)
       }
     }
   }, [open, initialData])
 
-  // --- UPLOAD ---
+  // Upload Logic
   const uploadToCloudinary = async (
     file: File,
     onSuccess: (url: string) => void,
@@ -203,7 +195,6 @@ export function ProductForm({
     )
   }
 
-  // --- LOGIC ---
   const handleSubmit = async () => {
     if (!formData.title || !formData.price || !formData.category) {
       return toast.warning('Vui lòng nhập các thông tin bắt buộc (*)!')
@@ -230,528 +221,621 @@ export function ProductForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[950px] max-h-[90vh] flex flex-col p-0 overflow-hidden bg-white">
-        <DialogHeader className="px-6 py-4 border-b flex-none">
-          <DialogTitle>
-            {initialData ? 'Cập nhật thiết bị' : 'Thêm thiết bị mới'}
+      <DialogContent className="sm:max-w-[950px] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden bg-white sm:rounded-2xl">
+        <DialogHeader className="px-6 py-5 border-b flex-none bg-white z-10">
+          <DialogTitle className="text-xl font-bold text-slate-800">
+            {initialData ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}
           </DialogTitle>
-          <DialogDescription>
-            Nhập thông tin chi tiết, thông số và các phiên bản.
-          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto bg-slate-50/50">
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6 sticky top-0 z-20 bg-white/95 backdrop-blur shadow-sm">
-              <TabsTrigger value="general">Cơ bản</TabsTrigger>
-              <TabsTrigger value="specs">Thông số KT</TabsTrigger>
-              <TabsTrigger value="variants">Phiên bản & Giá</TabsTrigger>
-              <TabsTrigger value="details">Bài viết</TabsTrigger>
-            </TabsList>
+            <div className="px-6 pt-4 sticky top-0 z-20 bg-slate-50/50 backdrop-blur-sm pb-2">
+              <TabsList className="grid w-full grid-cols-4 bg-slate-200/50 p-1 rounded-xl">
+                <TabsTrigger
+                  value="general"
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm font-medium transition-all"
+                >
+                  Cơ bản
+                </TabsTrigger>
+                <TabsTrigger
+                  value="specs"
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm font-medium transition-all"
+                >
+                  Thông số
+                </TabsTrigger>
+                <TabsTrigger
+                  value="variants"
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm font-medium transition-all"
+                >
+                  Phiên bản
+                </TabsTrigger>
+                <TabsTrigger
+                  value="details"
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm font-medium transition-all"
+                >
+                  Bài viết
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-            {/* TAB 1: CƠ BẢN */}
-            <TabsContent value="general" className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                {/* Ảnh */}
-                <div className="col-span-1 space-y-3">
-                  <Label>Ảnh đại diện (Mặc định)</Label>
-                  <div
-                    className="border-2 border-dashed rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 relative overflow-hidden"
-                    onClick={() =>
-                      document.getElementById('file-upload')?.click()
-                    }
-                  >
-                    {formData.image ? (
-                      <img
-                        src={formData.image}
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center">
-                        {isUploading ? (
-                          <Loader2 className="animate-spin text-indigo-600 w-8 h-8 mx-auto" />
-                        ) : (
-                          <ImageIcon className="text-gray-400 w-8 h-8 mx-auto" />
-                        )}
-                        <span className="text-xs text-gray-500 mt-2 block">
-                          {isUploading ? 'Đang tải...' : 'Upload ảnh'}
-                        </span>
-                      </div>
-                    )}
-                    <Input
-                      id="file-upload"
-                      type="file"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                      accept="image/*"
-                    />
-                  </div>
-                </div>
-
-                {/* Thông tin */}
-                <div className="col-span-2 space-y-4">
-                  <div className="grid gap-2">
-                    <Label className="text-red-500">Tên thiết bị *</Label>
-                    <Input
-                      value={formData.title}
-                      onChange={(e) =>
-                        setFormData({ ...formData, title: e.target.value })
+            <div className="px-6 py-4">
+              {/* TAB 1: CƠ BẢN */}
+              <TabsContent value="general" className="space-y-6 mt-0">
+                <div className="grid grid-cols-12 gap-6">
+                  {/* Cột trái: Ảnh */}
+                  <div className="col-span-12 md:col-span-4 space-y-3">
+                    <Label className="font-semibold text-slate-700">
+                      Ảnh đại diện
+                    </Label>
+                    <div
+                      className="group border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-xl aspect-square flex flex-col items-center justify-center cursor-pointer bg-white transition-all relative overflow-hidden shadow-sm hover:shadow-md"
+                      onClick={() =>
+                        document.getElementById('file-upload')?.click()
                       }
-                      placeholder="VD: iPhone 15 Pro Max..."
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Danh mục *</Label>
-                      <Select
-                        value={formData.category}
-                        onValueChange={(val) =>
-                          setFormData({ ...formData, category: val })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn danh mục" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((c) => (
-                            <SelectItem key={c._id} value={c.slug}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* SELECT BRAND - Đã Fix */}
-                    <div className="grid gap-2">
-                      <Label>Thương hiệu</Label>
-                      <Select
-                        value={formData.brand}
-                        onValueChange={(val) =>
-                          setFormData({ ...formData, brand: val })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn thương hiệu" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {brands.map((b) => (
-                            <SelectItem key={b._id} value={b._id}>
-                              {b.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    >
+                      {formData.image ? (
+                        <>
+                          <img
+                            src={formData.image}
+                            className="w-full h-full object-contain p-2"
+                          />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-white font-medium flex items-center gap-2">
+                              <UploadCloud size={18} /> Thay ảnh
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center p-4">
+                          {isUploading ? (
+                            <Loader2 className="animate-spin text-indigo-600 w-10 h-10 mx-auto mb-2" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                              <ImageIcon className="text-indigo-500 w-6 h-6" />
+                            </div>
+                          )}
+                          <span className="text-sm font-medium text-slate-600 block">
+                            Tải ảnh lên
+                          </span>
+                          <span className="text-xs text-slate-400 mt-1">
+                            PNG, JPG tối đa 5MB
+                          </span>
+                        </div>
+                      )}
+                      <Input
+                        id="file-upload"
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                        accept="image/*"
+                      />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2 relative">
-                      <Label className="text-red-500">
-                        Giá hiển thị (Từ) *
+                  {/* Cột phải: Thông tin */}
+                  <div className="col-span-12 md:col-span-8 space-y-5">
+                    <div className="grid gap-2">
+                      <Label className="font-semibold text-slate-700">
+                        Tên sản phẩm <span className="text-red-500">*</span>
                       </Label>
                       <Input
-                        type="number"
-                        value={formData.price}
+                        value={formData.title}
                         onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            price: Number(e.target.value)
-                          })
+                          setFormData({ ...formData, title: e.target.value })
                         }
-                        className="font-bold text-indigo-600"
-                      />
-                      {discountPercent > 0 && (
-                        <Badge
-                          variant="destructive"
-                          className="absolute right-0 top-0 px-1 py-0 text-[10px]"
-                        >
-                          -{discountPercent}%
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>Giá gốc (Niêm yết)</Label>
-                      <Input
-                        type="number"
-                        value={formData.originalPrice}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            originalPrice: Number(e.target.value)
-                          })
-                        }
+                        placeholder="VD: iPhone 15 Pro Max 256GB..."
+                        className="h-10 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
                       />
                     </div>
-                  </div>
 
-                  <div className="grid gap-2">
-                    <Label>Mô tả ngắn</Label>
-                    <Textarea
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          description: e.target.value
-                        })
-                      }
-                      placeholder="Mô tả nhanh..."
-                      rows={2}
-                    />
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* TAB 2: SPECS (Đã tối ưu UI) */}
-            <TabsContent value="specs" className="space-y-4">
-              <div className="flex gap-2 items-start bg-slate-50 p-3 rounded-lg border">
-                <div className="grid gap-2 w-1/3">
-                  <Label>Tên thông số</Label>
-                  <Input
-                    placeholder="VD: Chip..."
-                    value={tempSpec.k}
-                    onChange={(e) =>
-                      setTempSpec({ ...tempSpec, k: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2 w-2/3">
-                  <Label>Chi tiết</Label>
-                  <Textarea
-                    placeholder="VD: A17 Pro..."
-                    value={tempSpec.v}
-                    onChange={(e) =>
-                      setTempSpec({ ...tempSpec, v: e.target.value })
-                    }
-                    className="min-h-[80px]"
-                  />
-                </div>
-                <Button
-                  onClick={() => {
-                    if (!tempSpec.k || !tempSpec.v)
-                      return toast.warning('Nhập đủ thông tin')
-                    setFormData({
-                      ...formData,
-                      specs: [...formData.specs, tempSpec]
-                    })
-                    setTempSpec({ k: '', v: '' })
-                  }}
-                  variant="secondary"
-                  className="mt-8"
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-
-              <div className="border rounded-md h-[350px] overflow-y-auto relative scroll-smooth">
-                <table className="w-full text-sm text-left">
-                  <thead className="sticky top-0 bg-white shadow-sm z-10">
-                    <tr className="border-b">
-                      <th className="h-12 px-4 font-medium text-muted-foreground w-[150px]">
-                        Thông số
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground">
-                        Chi tiết
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground text-right w-[80px]">
-                        Xóa
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.specs.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={3}
-                          className="p-4 text-center text-gray-400 h-24"
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label>Danh mục</Label>
+                        <Select
+                          value={formData.category}
+                          onValueChange={(val) =>
+                            setFormData({ ...formData, category: val })
+                          }
                         >
-                          Chưa có thông số nào
-                        </td>
-                      </tr>
-                    ) : (
-                      formData.specs.map((s, idx) => (
-                        <tr key={idx} className="border-b hover:bg-muted/50">
-                          <td className="p-4 font-medium bg-gray-50 align-top">
-                            {s.k}
-                          </td>
-                          <td className="p-4 align-top">
-                            {s.v.length > 80 ? (
-                              <div className="flex items-start gap-2">
-                                <span className="flex-1 line-clamp-2">
-                                  {s.v}
-                                </span>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6"
-                                    >
-                                      <MoreHorizontal className="w-4 h-4" />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80 p-4 text-sm bg-white border">
-                                    <p className="font-bold mb-1">{s.k}</p>
-                                    <p>{s.v}</p>
-                                  </PopoverContent>
-                                </Popover>
-                              </div>
-                            ) : (
-                              <span>{s.v}</span>
-                            )}
-                          </td>
-                          <td className="p-4 text-right align-top">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                setFormData({
-                                  ...formData,
-                                  specs: formData.specs.filter(
-                                    (_, i) => i !== idx
-                                  )
-                                })
-                              }
-                              className="text-red-500 hover:bg-red-50"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </TabsContent>
+                          <SelectTrigger className="h-10 border-slate-200">
+                            <SelectValue placeholder="Chọn danh mục" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((c) => (
+                              <SelectItem key={c._id} value={c.slug}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-            {/* TAB 3: VARIANTS */}
-            <TabsContent value="variants" className="space-y-4">
-              {/* Form nhập variant (Rút gọn cho code ngắn) */}
-              <div className="grid grid-cols-12 gap-2 items-end bg-slate-50 p-3 rounded-lg border">
-                {/* ...Input Image, RAM, ROM, Color, Price... (Giống logic cũ) */}
-                <div
-                  className="col-span-1"
-                  onClick={() =>
-                    document.getElementById('variant-file-upload')?.click()
-                  }
-                >
-                  <div className="w-full aspect-square border-2 border-dashed rounded bg-white flex items-center justify-center cursor-pointer">
-                    {tempVariant.image ? (
-                      <img
-                        src={tempVariant.image}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : isUploadingVariant ? (
-                      <Loader2 className="animate-spin w-4 h-4" />
-                    ) : (
-                      <UploadCloud className="w-4 h-4 text-gray-400" />
-                    )}
-                  </div>
-                  <Input
-                    id="variant-file-upload"
-                    type="file"
-                    className="hidden"
-                    onChange={handleVariantFileUpload}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>RAM</Label>
-                  <Input
-                    value={tempVariant.ram}
-                    onChange={(e) =>
-                      setTempVariant({ ...tempVariant, ram: e.target.value })
-                    }
-                    placeholder="8GB"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>ROM</Label>
-                  <Input
-                    value={tempVariant.storage}
-                    onChange={(e) =>
-                      setTempVariant({
-                        ...tempVariant,
-                        storage: e.target.value
-                      })
-                    }
-                    placeholder="256GB"
-                  />
-                </div>
-                <div className="col-span-3">
-                  <Label>Màu</Label>
-                  <Input
-                    value={tempVariant.color}
-                    onChange={(e) =>
-                      setTempVariant({ ...tempVariant, color: e.target.value })
-                    }
-                    placeholder="Titan"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label>Giá</Label>
-                  <Input
-                    type="number"
-                    value={tempVariant.price || ''}
-                    onChange={(e) =>
-                      setTempVariant({
-                        ...tempVariant,
-                        price: Number(e.target.value)
-                      })
-                    }
-                  />
-                </div>
-                <div className="col-span-2 flex items-end gap-2">
-                  <div>
-                    <Label>Kho</Label>
-                    <Input
-                      type="number"
-                      value={tempVariant.stock || ''}
-                      onChange={(e) =>
-                        setTempVariant({
-                          ...tempVariant,
-                          stock: Number(e.target.value)
-                        })
-                      }
-                    />
-                  </div>
-                  <Button
-                    onClick={() => {
-                      if (!tempVariant.price) return toast.warning('Nhập giá')
-                      setFormData({
-                        ...formData,
-                        variants: [...formData.variants, tempVariant]
-                      })
-                      setTempVariant({
-                        ram: '',
-                        storage: '',
-                        color: '',
-                        price: 0,
-                        stock: 0,
-                        image: ''
-                      })
-                    }}
-                    variant="secondary"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="border rounded-md h-[350px] overflow-y-auto relative scroll-smooth">
-                <table className="w-full text-sm text-left">
-                  <thead className="sticky top-0 bg-white shadow-sm z-10">
-                    <tr className="border-b">
-                      <th className="h-12 px-4 font-medium text-muted-foreground w-[60px]">
-                        Ảnh
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground">
-                        RAM/ROM
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground">
-                        Màu
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground">
-                        Giá
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground">
-                        Kho
-                      </th>
-                      <th className="h-12 px-4 font-medium text-muted-foreground text-right">
-                        Xóa
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.variants.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="p-4 text-center text-gray-400 h-24"
+                      <div className="grid gap-2">
+                        <Label>Thương hiệu</Label>
+                        <Select
+                          value={formData.brand}
+                          onValueChange={(val) =>
+                            setFormData({ ...formData, brand: val })
+                          }
                         >
-                          Chưa có phiên bản nào
-                        </td>
-                      </tr>
-                    ) : (
-                      formData.variants.map((v, idx) => (
-                        <tr key={idx} className="border-b hover:bg-muted/50">
-                          <td className="p-4">
-                            <div className="w-8 h-8 border rounded overflow-hidden">
-                              {v.image ? (
-                                <img
-                                  src={v.image}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <ImageIcon className="w-4 h-4 m-auto text-gray-300" />
-                              )}
+                          <SelectTrigger className="h-10 border-slate-200">
+                            <SelectValue placeholder="Chọn thương hiệu" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {brands.map((b) => (
+                              <SelectItem key={b._id} value={b._id}>
+                                {b.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2 relative">
+                        <Label>
+                          Giá bán (VND) <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            value={formData.price}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                price: Number(e.target.value)
+                              })
+                            }
+                            className="h-10 border-slate-200 pr-12 font-semibold text-indigo-600"
+                          />
+                          {discountPercent > 0 && (
+                            <div className="absolute right-2 top-2">
+                              <Badge
+                                variant="destructive"
+                                className="text-[10px] h-6 px-1.5"
+                              >
+                                -{discountPercent}%
+                              </Badge>
                             </div>
-                          </td>
-                          <td className="p-4 font-medium">
-                            {v.ram} / {v.storage}
-                          </td>
-                          <td className="p-4">{v.color}</td>
-                          <td className="p-4 text-indigo-600 font-bold">
-                            {formatCurrency(v.price)}
-                          </td>
-                          <td className="p-4">{v.stock}</td>
-                          <td className="p-4 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                setFormData({
-                                  ...formData,
-                                  variants: formData.variants.filter(
-                                    (_, i) => i !== idx
-                                  )
-                                })
-                              }
-                              className="text-red-500 hover:bg-red-50"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </TabsContent>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Giá niêm yết (Gạch ngang)</Label>
+                        <Input
+                          type="number"
+                          value={formData.originalPrice}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              originalPrice: Number(e.target.value)
+                            })
+                          }
+                          className="h-10 border-slate-200 text-slate-500"
+                        />
+                      </div>
+                    </div>
 
-            {/* TAB 4: DETAILS */}
-            <TabsContent value="details" className="space-y-4">
-              <Textarea
-                value={formData.content}
-                onChange={(e) =>
-                  setFormData({ ...formData, content: e.target.value })
-                }
-                placeholder="Bài viết đánh giá chi tiết..."
-                className="min-h-[300px]"
-              />
-            </TabsContent>
+                    <div className="grid gap-2">
+                      <Label>Mô tả ngắn</Label>
+                      <Textarea
+                        value={formData.description}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            description: e.target.value
+                          })
+                        }
+                        placeholder="Tóm tắt tính năng nổi bật..."
+                        rows={3}
+                        className="resize-none border-slate-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* TAB 2: SPECS (Makeover) */}
+              <TabsContent value="specs" className="space-y-4 mt-0">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-indigo-500" /> Thêm thông số
+                    mới
+                  </h3>
+                  <div className="flex gap-4 items-start">
+                    <div className="w-1/3 space-y-1.5">
+                      <Label className="text-xs text-slate-500">
+                        Tên thông số
+                      </Label>
+                      <Input
+                        placeholder="VD: Chipset"
+                        value={tempSpec.k}
+                        onChange={(e) =>
+                          setTempSpec({ ...tempSpec, k: e.target.value })
+                        }
+                        className="bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div className="w-2/3 space-y-1.5">
+                      <Label className="text-xs text-slate-500">Chi tiết</Label>
+                      <div className="flex gap-2">
+                        <Textarea
+                          placeholder="VD: Apple A17 Pro 3nm..."
+                          value={tempSpec.v}
+                          onChange={(e) =>
+                            setTempSpec({ ...tempSpec, v: e.target.value })
+                          }
+                          className="bg-slate-50 border-slate-200 min-h-[42px] py-2 leading-tight"
+                          rows={1}
+                        />
+                        <Button
+                          onClick={() => {
+                            if (!tempSpec.k || !tempSpec.v)
+                              return toast.warning('Nhập đủ thông tin')
+                            setFormData({
+                              ...formData,
+                              specs: [...formData.specs, tempSpec]
+                            })
+                            setTempSpec({ k: '', v: '' })
+                          }}
+                          className="bg-indigo-600 hover:bg-indigo-700 shrink-0 h-[42px] w-[42px] p-0 rounded-lg"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[300px] flex flex-col">
+                  <div className="bg-slate-50/80 border-b px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-700">
+                      Danh sách thông số ({formData.specs.length})
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto max-h-[350px]">
+                    <table className="w-full text-sm text-left">
+                      <thead className="sticky top-0 bg-white z-10 shadow-sm">
+                        <tr className="border-b text-xs uppercase tracking-wider text-slate-500">
+                          <th className="py-3 px-4 w-[30%] bg-slate-50/50">
+                            Thông số
+                          </th>
+                          <th className="py-3 px-4 bg-slate-50/50">Chi tiết</th>
+                          <th className="py-3 px-4 w-[50px] text-right bg-slate-50/50"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {formData.specs.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={3}
+                              className="p-10 text-center text-slate-400"
+                            >
+                              Chưa có thông số nào được thêm
+                            </td>
+                          </tr>
+                        ) : (
+                          formData.specs.map((s, idx) => (
+                            <tr
+                              key={idx}
+                              className="hover:bg-slate-50/80 transition-colors group"
+                            >
+                              <td className="p-4 font-medium text-slate-700 align-top">
+                                {s.k}
+                              </td>
+                              <td className="p-4 text-slate-600 align-top whitespace-pre-line leading-relaxed">
+                                {s.v}
+                              </td>
+                              <td className="p-4 text-right align-top">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    setFormData({
+                                      ...formData,
+                                      specs: formData.specs.filter(
+                                        (_, i) => i !== idx
+                                      )
+                                    })
+                                  }
+                                  className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* TAB 3: VARIANTS (Makeover) */}
+              <TabsContent value="variants" className="space-y-4 mt-0">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="grid grid-cols-12 gap-4 items-end">
+                    {/* Upload ảnh nhỏ gọn hơn */}
+                    <div className="col-span-12 md:col-span-2">
+                      <Label className="text-xs text-slate-500 mb-1.5 block">
+                        Ảnh màu
+                      </Label>
+                      <div
+                        className="w-full aspect-square border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-lg flex items-center justify-center cursor-pointer bg-slate-50 transition-colors relative group overflow-hidden"
+                        onClick={() =>
+                          document
+                            .getElementById('variant-file-upload')
+                            ?.click()
+                        }
+                      >
+                        {tempVariant.image ? (
+                          <>
+                            <img
+                              src={tempVariant.image}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/30 hidden group-hover:flex items-center justify-center text-white">
+                              <Plus size={20} />
+                            </div>
+                          </>
+                        ) : isUploadingVariant ? (
+                          <Loader2 className="animate-spin w-5 h-5 text-indigo-500" />
+                        ) : (
+                          <div className="text-center">
+                            <UploadCloud className="w-6 h-6 text-slate-400 mx-auto" />
+                          </div>
+                        )}
+                      </div>
+                      <Input
+                        id="variant-file-upload"
+                        type="file"
+                        className="hidden"
+                        onChange={handleVariantFileUpload}
+                      />
+                    </div>
+
+                    {/* Input fields gọn gàng */}
+                    <div className="col-span-12 md:col-span-10 grid grid-cols-4 gap-4">
+                      <div className="col-span-1">
+                        <Label className="text-xs text-slate-500 mb-1.5 block">
+                          RAM
+                        </Label>
+                        <Input
+                          value={tempVariant.ram}
+                          onChange={(e) =>
+                            setTempVariant({
+                              ...tempVariant,
+                              ram: e.target.value
+                            })
+                          }
+                          placeholder="8GB"
+                          className="bg-slate-50 h-9"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <Label className="text-xs text-slate-500 mb-1.5 block">
+                          ROM
+                        </Label>
+                        <Input
+                          value={tempVariant.storage}
+                          onChange={(e) =>
+                            setTempVariant({
+                              ...tempVariant,
+                              storage: e.target.value
+                            })
+                          }
+                          placeholder="256GB"
+                          className="bg-slate-50 h-9"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs text-slate-500 mb-1.5 block">
+                          Màu sắc
+                        </Label>
+                        <Input
+                          value={tempVariant.color}
+                          onChange={(e) =>
+                            setTempVariant({
+                              ...tempVariant,
+                              color: e.target.value
+                            })
+                          }
+                          placeholder="Titan Xanh"
+                          className="bg-slate-50 h-9"
+                        />
+                      </div>
+
+                      <div className="col-span-2">
+                        <Label className="text-xs text-slate-500 mb-1.5 block">
+                          Giá bán thêm
+                        </Label>
+                        <Input
+                          type="number"
+                          value={tempVariant.price || ''}
+                          onChange={(e) =>
+                            setTempVariant({
+                              ...tempVariant,
+                              price: Number(e.target.value)
+                            })
+                          }
+                          className="bg-slate-50 h-9 font-medium"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <Label className="text-xs text-slate-500 mb-1.5 block">
+                          Kho
+                        </Label>
+                        <Input
+                          type="number"
+                          value={tempVariant.stock || ''}
+                          onChange={(e) =>
+                            setTempVariant({
+                              ...tempVariant,
+                              stock: Number(e.target.value)
+                            })
+                          }
+                          className="bg-slate-50 h-9"
+                        />
+                      </div>
+
+                      <div className="col-span-1">
+                        <Label className="text-xs text-transparent mb-1.5 block">
+                          Add
+                        </Label>
+                        <Button
+                          onClick={() => {
+                            if (!tempVariant.price)
+                              return toast.warning('Nhập giá bán')
+                            setFormData({
+                              ...formData,
+                              variants: [...formData.variants, tempVariant]
+                            })
+                            setTempVariant({
+                              ram: '',
+                              storage: '',
+                              color: '',
+                              price: 0,
+                              stock: 0,
+                              image: ''
+                            })
+                          }}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 h-9"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[300px] flex flex-col">
+                  <div className="bg-slate-50/80 border-b px-4 py-3">
+                    <span className="text-sm font-semibold text-slate-700">
+                      Danh sách phiên bản ({formData.variants.length})
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto max-h-[350px]">
+                    <table className="w-full text-sm text-left">
+                      <thead className="sticky top-0 bg-white z-10 shadow-sm">
+                        <tr className="border-b text-xs uppercase tracking-wider text-slate-500">
+                          <th className="py-3 px-4 w-[60px] bg-slate-50/50">
+                            Ảnh
+                          </th>
+                          <th className="py-3 px-4 bg-slate-50/50">Cấu hình</th>
+                          <th className="py-3 px-4 bg-slate-50/50">Màu sắc</th>
+                          <th className="py-3 px-4 bg-slate-50/50">Giá bán</th>
+                          <th className="py-3 px-4 bg-slate-50/50">Kho</th>
+                          <th className="py-3 px-4 text-right bg-slate-50/50"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {formData.variants.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="p-10 text-center text-slate-400"
+                            >
+                              Chưa có phiên bản nào
+                            </td>
+                          </tr>
+                        ) : (
+                          formData.variants.map((v, idx) => (
+                            <tr
+                              key={idx}
+                              className="hover:bg-slate-50/80 transition-colors group"
+                            >
+                              <td className="p-3">
+                                <div className="w-10 h-10 rounded-lg border bg-white flex items-center justify-center overflow-hidden">
+                                  {v.image ? (
+                                    <img
+                                      src={v.image}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <ImageIcon className="w-4 h-4 text-slate-300" />
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3 font-medium text-slate-700">
+                                {v.ram} / {v.storage}
+                              </td>
+                              <td className="p-3 text-slate-600">
+                                <Badge
+                                  variant="outline"
+                                  className="font-normal bg-white"
+                                >
+                                  {v.color}
+                                </Badge>
+                              </td>
+                              <td className="p-3 font-semibold text-indigo-600">
+                                {formatCurrency(v.price)}
+                              </td>
+                              <td className="p-3 text-slate-600">{v.stock}</td>
+                              <td className="p-3 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    setFormData({
+                                      ...formData,
+                                      variants: formData.variants.filter(
+                                        (_, i) => i !== idx
+                                      )
+                                    })
+                                  }
+                                  className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* TAB 4: DETAILS */}
+              <TabsContent value="details" className="space-y-4 mt-0">
+                <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm h-[500px]">
+                  <Textarea
+                    value={formData.content}
+                    onChange={(e) =>
+                      setFormData({ ...formData, content: e.target.value })
+                    }
+                    placeholder="Viết bài đánh giá chi tiết sản phẩm tại đây..."
+                    className="w-full h-full border-0 focus-visible:ring-0 resize-none p-4 text-base leading-relaxed"
+                  />
+                </div>
+              </TabsContent>
+            </div>
           </Tabs>
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t bg-gray-50 flex-none z-50">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Hủy
+        <DialogFooter className="px-6 py-4 border-t bg-white flex-none z-30">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="h-10 px-6 border-slate-300 text-slate-700 hover:bg-slate-50"
+          >
+            Hủy bỏ
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || isUploading}
-            className="bg-indigo-600 hover:bg-indigo-700 min-w-[120px]"
+            className="h-10 px-8 bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all"
           >
             {isSubmitting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : initialData ? (
-              'Lưu thay đổi'
             ) : (
-              'Đăng bán'
+              <Check className="mr-2 h-4 w-4" />
             )}
+            {initialData ? 'Lưu thay đổi' : 'Đăng bán ngay'}
           </Button>
         </DialogFooter>
       </DialogContent>
