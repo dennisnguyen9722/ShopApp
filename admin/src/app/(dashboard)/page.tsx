@@ -3,14 +3,13 @@
 
 import { useEffect, useState } from 'react'
 import axiosClient from '@/lib/axiosClient'
+import { useRouter } from 'next/navigation' // 👈 Import Router
 import {
   DollarSign,
   Users,
-  CreditCard,
   Package,
   TrendingUp,
-  ShoppingBag,
-  Clock
+  ShoppingBag
 } from 'lucide-react'
 import {
   BarChart,
@@ -26,20 +25,15 @@ import { useAuth } from '@/context/AuthContext'
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 
 export default function DashboardPage() {
   const { user } = useAuth()
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+
+  // 👇 Khai báo Router
+  const router = useRouter()
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -56,37 +50,39 @@ export default function DashboardPage() {
     fetchStats()
   }, [])
 
-  // Helper format tiền
+  // Helper: Format tiền tệ
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND'
     }).format(amount)
 
-  // Xử lý dữ liệu biểu đồ (điền 0 vào những ngày không có đơn)
+  // Helper: Xử lý dữ liệu biểu đồ
   const processChartData = () => {
     if (!stats?.chart) return []
-
-    // Tạo mảng 7 ngày gần nhất
     const last7Days = []
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
-      last7Days.push(d.toISOString().split('T')[0]) // "2023-10-25"
+      last7Days.push(d.toISOString().split('T')[0])
     }
-
     return last7Days.map((date) => {
       const found = stats.chart.find((item: any) => item._id === date)
       return {
-        name: date.slice(5).split('-').reverse().join('/'), // Chuyển "2023-10-25" -> "25/10"
+        name: date.slice(5).split('-').reverse().join('/'),
         total: found ? found.total : 0
       }
     })
   }
 
+  // 👇 HÀM CHUYỂN TRANG KHI BẤM VÀO ĐƠN HÀNG
+  const handleViewOrder = (orderId: string) => {
+    router.push(`/orders?id=${orderId}`)
+  }
+
   if (loading) {
     return (
-      <div className="p-8 text-center text-gray-500">
+      <div className="p-8 text-center text-gray-500 flex items-center justify-center h-full">
         Đang tải dữ liệu thống kê...
       </div>
     )
@@ -107,6 +103,7 @@ export default function DashboardPage() {
 
       {/* 1. CARDS THỐNG KÊ */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Doanh thu */}
         <Card className="shadow-sm border-l-4 border-l-indigo-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
@@ -125,6 +122,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Đơn hàng mới */}
         <Card className="shadow-sm border-l-4 border-l-orange-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
@@ -142,6 +140,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Khách hàng */}
         <Card className="shadow-sm border-l-4 border-l-blue-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
@@ -157,6 +156,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Sản phẩm */}
         <Card className="shadow-sm border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
@@ -174,7 +174,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        {/* 2. BIỂU ĐỒ DOANH THU (Chiếm 4 phần) */}
+        {/* 2. BIỂU ĐỒ DOANH THU */}
         <Card className="col-span-4 border-none shadow-sm">
           <CardHeader>
             <CardTitle>Biểu đồ doanh thu</CardTitle>
@@ -219,7 +219,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* 3. ĐƠN HÀNG VỪA ĐẶT (Chiếm 3 phần) */}
+        {/* 3. DANH SÁCH ĐƠN HÀNG VỪA ĐẶT */}
         <Card className="col-span-3 border-none shadow-sm">
           <CardHeader>
             <CardTitle>Đơn hàng vừa đặt</CardTitle>
@@ -235,11 +235,13 @@ export default function DashboardPage() {
                 stats?.recentOrders.map((order: any) => (
                   <div
                     key={order._id}
-                    className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
+                    // 👇 SỰ KIỆN CLICK ĐỂ XEM CHI TIẾT
+                    onClick={() => handleViewOrder(order._id)}
+                    className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors group"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                        <ShoppingBag className="w-5 h-5 text-gray-600" />
+                      <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                        <ShoppingBag className="w-5 h-5 text-indigo-600" />
                       </div>
                       <div>
                         <p className="font-medium text-sm text-gray-900">
@@ -258,7 +260,7 @@ export default function DashboardPage() {
                         {order.status === 'pending' && (
                           <Badge
                             variant="secondary"
-                            className="bg-yellow-100 text-yellow-700 text-[10px] h-5"
+                            className="bg-yellow-100 text-yellow-700 text-[10px] h-5 hover:bg-yellow-100"
                           >
                             Mới
                           </Badge>
@@ -266,7 +268,7 @@ export default function DashboardPage() {
                         {order.status === 'completed' && (
                           <Badge
                             variant="secondary"
-                            className="bg-green-100 text-green-700 text-[10px] h-5"
+                            className="bg-green-100 text-green-700 text-[10px] h-5 hover:bg-green-100"
                           >
                             Xong
                           </Badge>
@@ -274,7 +276,7 @@ export default function DashboardPage() {
                         {order.status === 'confirmed' && (
                           <Badge
                             variant="secondary"
-                            className="bg-blue-100 text-blue-700 text-[10px] h-5"
+                            className="bg-blue-100 text-blue-700 text-[10px] h-5 hover:bg-blue-100"
                           >
                             Đã duyệt
                           </Badge>
@@ -282,7 +284,7 @@ export default function DashboardPage() {
                         {order.status === 'cancelled' && (
                           <Badge
                             variant="secondary"
-                            className="bg-red-100 text-red-700 text-[10px] h-5"
+                            className="bg-red-100 text-red-700 text-[10px] h-5 hover:bg-red-100"
                           >
                             Hủy
                           </Badge>

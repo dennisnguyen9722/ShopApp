@@ -1,23 +1,46 @@
 const express = require('express')
 const router = express.Router()
 const Order = require('../models/Order')
+const Product = require('../models/Product')
 const { protect, checkPermission } = require('../middleware/authMiddleware')
 const PERMISSIONS = require('../config/permissions')
 
-// 1. TẠO ĐƠN HÀNG (PUBLIC - Khách vãng lai cũng đặt được)
+// 1. TẠO ĐƠN HÀNG (PUBLIC) + TRỪ KHO + BẮN NOTI
 router.post('/', async (req, res) => {
   try {
-    const { customer, items, totalAmount, paymentMethod, note, userId } =
-      req.body
+    const {
+      customer,
+      items, // [{ product: 'ID', quantity: 2, ... }]
+      totalAmount,
+      paymentMethod,
+      note,
+      userId
+    } = req.body
 
+    // --- Validate cơ bản ---
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'Giỏ hàng trống' })
     }
-
     if (!customer || !customer.phone || !customer.address) {
       return res.status(400).json({ message: 'Thiếu thông tin giao hàng' })
     }
 
+    // --- 🔥 LOGIC MỚI: KIỂM TRA TỒN KHO TRƯỚC KHI BÁN ---
+    for (const item of items) {
+      const product = await Product.findById(item.product)
+      if (!product) {
+        return res
+          .status(404)
+          .json({ message: `Sản phẩm ID ${item.product} không tồn tại` })
+      }
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Sản phẩm "${product.title}" chỉ còn ${product.stock}, không đủ giao.`
+        })
+      }
+    }
+
+    // --- Tạo đơn hàng ---
     const orderData = {
       customer,
       items,
@@ -26,26 +49,44 @@ router.post('/', async (req, res) => {
       note,
       user: userId || null
     }
-
     const createdOrder = await Order.create(orderData)
 
-    // 🔥 REAL-TIME NOTIFICATION CODE 🔥
-    // Lấy instance socket.io từ app (cần config app.set('io', io) bên server.js)
-    const io = req.app.get('io')
+    // --- 🔥 LOGIC MỚI: TRỪ KHO & CẢNH BÁO ---
+    const io = req.app.get('io') // Lấy Socket IO
 
+    for (const item of items) {
+      // 1. Trừ số lượng tồn kho
+      const product = await Product.findById(item.product)
+      product.stock -= item.quantity
+      product.sold = (product.sold || 0) + item.quantity // Tăng số lượng đã bán
+      await product.save()
+
+      // 2. Kiểm tra nếu sắp hết hàng (Ví dụ: dưới 5 cái)
+      if (product.stock <= 5 && io) {
+        io.emit('low_stock', {
+          productId: product._id,
+          productName: product.title,
+          stock: product.stock,
+          image: product.image
+        })
+        console.log(
+          `⚠️ Cảnh báo: ${product.title} sắp hết hàng (${product.stock})`
+        )
+      }
+    }
+
+    // --- Bắn thông báo Đơn hàng mới ---
     if (io) {
       io.emit('new_order', {
         orderId: createdOrder._id,
-        orderCode: createdOrder._id.toString().slice(-6).toUpperCase(), // Giả lập mã đơn ngắn
+        orderCode: createdOrder._id.toString().slice(-6).toUpperCase(),
         totalPrice: new Intl.NumberFormat('vi-VN', {
           style: 'currency',
           currency: 'VND'
         }).format(createdOrder.totalAmount),
         customerName: customer.name
       })
-      console.log('📢 Đã bắn thông báo new_order')
     }
-    // 🔥 END REAL-TIME 🔥
 
     res.status(201).json(createdOrder)
   } catch (err) {

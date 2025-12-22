@@ -1,21 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation' // 👈 Import Hook điều hướng
 import axiosClient from '@/lib/axiosClient'
 import {
   ShoppingBag,
   Eye,
   Loader2,
-  Calendar,
-  MapPin,
-  User,
-  Phone,
-  CreditCard,
+  PackageCheck,
   Truck,
   CheckCircle,
   XCircle,
-  PackageCheck
+  User,
+  MapPin,
+  CreditCard
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -44,7 +43,6 @@ import {
   DialogTitle,
   DialogFooter
 } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -53,7 +51,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 
-// Types
+// --- TYPES ---
 interface OrderItem {
   product: any
   productName: string
@@ -79,14 +77,20 @@ interface Order {
   note?: string
 }
 
-export default function OrdersPage() {
+// --- MAIN LOGIC COMPONENT ---
+function OrdersContent() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>('all')
 
-  // State Detail Dialog
+  // State Modal Chi tiết
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
+
+  // 👇 HOOK LẤY ID TỪ URL (QUAN TRỌNG)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const notifyOrderId = searchParams.get('id') // Lấy id từ ?id=xxxx
 
   // 1. FETCH DATA
   const fetchOrders = async () => {
@@ -95,7 +99,6 @@ export default function OrdersPage() {
       const { data } = await axiosClient.get('/orders')
       setOrders(data)
     } catch (error: any) {
-      // Nếu lỗi 403 (không có quyền)
       if (error.response?.status === 403) {
         toast.error('Bạn không có quyền xem đơn hàng')
       } else {
@@ -110,21 +113,34 @@ export default function OrdersPage() {
     fetchOrders()
   }, [])
 
-  // 2. UPDATE STATUS
+  // 2. 🔥 LOGIC TỰ ĐỘNG MỞ MODAL KHI CÓ ID TRÊN URL
+  useEffect(() => {
+    if (notifyOrderId && orders.length > 0) {
+      const targetOrder = orders.find((o) => o._id === notifyOrderId)
+      if (targetOrder) {
+        setSelectedOrder(targetOrder)
+
+        // (Tuỳ chọn) Xóa ID trên URL đi cho đẹp sau khi mở xong
+        // router.replace('/admin/orders', { scroll: false })
+      }
+    }
+  }, [notifyOrderId, orders, router])
+
+  // 3. UPDATE STATUS
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     setIsUpdating(true)
     try {
       await axiosClient.put(`/orders/${orderId}/status`, { status: newStatus })
       toast.success('Cập nhật trạng thái thành công!')
 
-      // Update state cục bộ để UI phản hồi nhanh
+      // Update Local State
       setOrders((prev) =>
         prev.map((o) =>
           o._id === orderId ? { ...o, status: newStatus as any } : o
         )
       )
 
-      // Đóng modal nếu đang mở đúng đơn đó
+      // Update Modal State
       if (selectedOrder?._id === orderId) {
         setSelectedOrder((prev) =>
           prev ? { ...prev, status: newStatus as any } : null
@@ -139,14 +155,13 @@ export default function OrdersPage() {
     }
   }
 
-  // Helper: Format tiền
+  // Helper Formatter
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND'
     }).format(amount)
 
-  // Helper: Status Config (Màu sắc + Label)
   const getStatusConfig = (status: string) => {
     switch (status) {
       case 'pending':
@@ -184,7 +199,6 @@ export default function OrdersPage() {
     }
   }
 
-  // Filter orders
   const filteredOrders =
     filterStatus === 'all'
       ? orders
@@ -204,7 +218,6 @@ export default function OrdersPage() {
             </CardDescription>
           </div>
 
-          {/* Bộ lọc trạng thái */}
           <div className="w-[200px]">
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger>
@@ -255,11 +268,16 @@ export default function OrdersPage() {
                   filteredOrders.map((order) => {
                     const statusConfig = getStatusConfig(order.status)
                     const StatusIcon = statusConfig.icon
+                    const isHighlighted = notifyOrderId === order._id // Highlight nếu đang chọn từ noti
 
                     return (
                       <TableRow
                         key={order._id}
-                        className="hover:bg-gray-50/50 cursor-pointer"
+                        className={`cursor-pointer transition-colors ${
+                          isHighlighted
+                            ? 'bg-indigo-50 hover:bg-indigo-100'
+                            : 'hover:bg-gray-50/50'
+                        }`}
                         onClick={() => setSelectedOrder(order)}
                       >
                         <TableCell className="font-mono font-medium text-gray-500">
@@ -342,7 +360,7 @@ export default function OrdersPage() {
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-white">
             {selectedOrder && (
               <div className="space-y-6">
-                {/* 1. THÔNG TIN KHÁCH & ĐƠN */}
+                {/* THÔNG TIN */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-50 p-4 rounded-xl border space-y-3">
                     <h4 className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
@@ -403,7 +421,7 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
-                {/* 2. DANH SÁCH SẢN PHẨM */}
+                {/* SẢN PHẨM */}
                 <div>
                   <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
                     <ShoppingBag className="w-4 h-4" /> Sản phẩm đã mua (
@@ -472,11 +490,9 @@ export default function OrdersPage() {
             )}
           </div>
 
-          {/* ACTION FOOTER - NÚT XỬ LÝ ĐƠN */}
+          {/* ACTION FOOTER */}
           {selectedOrder && (
             <DialogFooter className="px-6 py-4 border-t bg-gray-50 gap-2">
-              {/* LOGIC HIỂN THỊ NÚT THEO TRẠNG THÁI */}
-
               {selectedOrder.status === 'pending' && (
                 <>
                   <Button
@@ -528,7 +544,6 @@ export default function OrdersPage() {
                 </Button>
               )}
 
-              {/* Đơn đã xong hoặc hủy thì chỉ hiện nút đóng */}
               {['completed', 'cancelled'].includes(selectedOrder.status) && (
                 <Button
                   variant="outline"
@@ -542,5 +557,20 @@ export default function OrdersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// 👇 WRAPPER EXPORT DEFAULT (BẮT BUỘC ĐỂ DÙNG useSearchParams)
+export default function OrdersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      }
+    >
+      <OrdersContent />
+    </Suspense>
   )
 }

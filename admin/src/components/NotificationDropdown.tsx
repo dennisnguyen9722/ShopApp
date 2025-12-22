@@ -16,7 +16,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+// 👇 SỬA ĐOẠN NÀY:
+// Lấy URL từ env (đang có đuôi /api), dùng .replace để cắt bỏ đuôi /api đi
+// Kết quả sẽ là: https://supermall-api.onrender.com (Chuẩn cho Socket)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'
+const SOCKET_URL = API_URL.replace('/api', '')
 
 interface Notification {
   id: string
@@ -37,29 +41,36 @@ export function NotificationDropdown() {
   const socketRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // 👇 1. KHAI BÁO HÀM NÀY TRƯỚC (Dùng useCallback để tối ưu)
   const handleNewNotification = useCallback((notif: Notification) => {
-    // Phát âm thanh
     try {
       audioRef.current?.play().catch(() => {})
     } catch (e) {}
 
-    // Cập nhật State
     setNotifications((prev) => [notif, ...prev])
     setUnreadCount((prev) => prev + 1)
   }, [])
 
-  // 👇 2. SAU ĐÓ MỚI GỌI USE_EFFECT
   useEffect(() => {
-    // Init Audio
     if (typeof window !== 'undefined') {
       audioRef.current = new Audio('/sounds/notification.mp3')
     }
 
-    // Connect Socket
-    socketRef.current = io(SOCKET_URL)
+    // 👇 THÊM OPTION transports: ['websocket'] ĐỂ KẾT NỐI ỔN ĐỊNH HƠN TRÊN RENDER
+    socketRef.current = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'], // Ưu tiên websocket
+      withCredentials: true // Nếu cần cookie (thường là không cần nếu set CORS *)
+    })
 
-    // Lắng nghe sự kiện
+    console.log('🔌 Connecting to Socket at:', SOCKET_URL)
+
+    socketRef.current.on('connect', () => {
+      console.log('✅ Socket Connected! ID:', socketRef.current.id)
+    })
+
+    socketRef.current.on('connect_error', (err: any) => {
+      console.log('❌ Socket Error:', err.message)
+    })
+
     socketRef.current.on('new_order', (data: any) => {
       console.log('Nhận thông báo đơn hàng:', data)
       handleNewNotification({
@@ -67,7 +78,7 @@ export function NotificationDropdown() {
         type: 'ORDER',
         title: 'Đơn hàng mới! 🤑',
         message: `Đơn #${data.orderCode} - ${data.totalPrice}`,
-        link: `/admin/orders/${data.orderId}`,
+        link: `/orders?id=${data.orderId}`,
         time: 'Vừa xong',
         isRead: false
       })
@@ -79,7 +90,7 @@ export function NotificationDropdown() {
         type: 'STOCK',
         title: 'Cảnh báo kho ⚠️',
         message: `Sản phẩm ${data.productName} sắp hết!`,
-        link: `/admin/products/${data.productId}`,
+        link: `/products/${data.productId}`,
         time: 'Vừa xong',
         isRead: false
       })
@@ -88,7 +99,7 @@ export function NotificationDropdown() {
     return () => {
       socketRef.current.disconnect()
     }
-  }, [handleNewNotification]) // Thêm dependency
+  }, [handleNewNotification])
 
   const handleItemClick = (notif: Notification) => {
     if (!notif.isRead) {

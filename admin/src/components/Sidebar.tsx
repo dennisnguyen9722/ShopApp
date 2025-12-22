@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Megaphone,
   MessageSquare,
-  Settings
+  Settings,
+  Warehouse
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
@@ -31,6 +32,12 @@ const menuItems = [
     icon: Package,
     href: '/products',
     permission: 'products.view' // Cần quyền xem sản phẩm
+  },
+  {
+    title: 'Kho hàng',
+    icon: Warehouse,
+    href: '/inventory',
+    permission: 'products.view' // Dùng chung quyền với sản phẩm hoặc tạo quyền 'inventory.manage' riêng
   },
   {
     title: 'Danh mục',
