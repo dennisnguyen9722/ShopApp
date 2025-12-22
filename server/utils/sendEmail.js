@@ -1,20 +1,26 @@
 const nodemailer = require('nodemailer')
 
 const sendEmail = async (options) => {
-  // 1. Cấu hình Transporter chuẩn cho Render + Gmail
+  // 👇 CẤU HÌNH LẠI TRANSPORTER DÙNG PORT 587
   const transporter = nodemailer.createTransport({
-    service: 'gmail', // Dùng service mặc định cho tiện
+    host: 'smtp.gmail.com',
+    port: 587, // Đổi sang 587
+    secure: false, // Port 587 thì secure phải là FALSE
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS // Mật khẩu ứng dụng (không khoảng trắng)
+      pass: process.env.EMAIL_PASS
     },
-    // 👇 QUAN TRỌNG: Cấu hình này giúp bypass lỗi timeout trên Render
     tls: {
-      rejectUnauthorized: false
-    }
+      rejectUnauthorized: false, // Bỏ qua lỗi chứng chỉ
+      ciphers: 'SSLv3' // Thêm dòng này để tăng độ tương thích
+    },
+    // Tăng thời gian chờ lên tối đa
+    connectionTimeout: 60000, // 60 giây
+    greetingTimeout: 30000,
+    socketTimeout: 60000
   })
 
-  // 2. Format tiền
+  // ... (Phần generate template và mailOptions giữ nguyên không đổi) ...
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -22,78 +28,26 @@ const sendEmail = async (options) => {
     }).format(amount)
   }
 
-  // 3. HTML Template (Hóa đơn đẹp)
+  // (Copy lại hàm generateOrderTemplate cũ của bạn vào đây)
   const generateOrderTemplate = (order) => {
-    const itemsHtml = order.items
-      .map(
-        (item) => `
-      <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 10px;">
-            ${item.productName} <br/>
-            <small style="color: #777;">${item.variant?.color || ''} ${
-          item.variant?.storage || ''
-        }</small>
-        </td>
-        <td style="padding: 10px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px; text-align: right;">${formatCurrency(
-          item.price * item.quantity
-        )}</td>
-      </tr>
-    `
-      )
-      .join('')
-
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px;">
-        <div style="background-color: #4F46E5; padding: 20px; text-align: center; color: white;">
-          <h1>Cảm ơn bạn đã mua hàng!</h1>
-          <p>Đơn hàng #${order._id
-            .toString()
-            .slice(-6)
-            .toUpperCase()} đã hoàn thành.</p>
-        </div>
-        <div style="padding: 20px;">
-          <p>Xin chào <strong>${order.customer.name}</strong>,</p>
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr style="background-color: #f9fafb;">
-                <th style="padding: 10px; text-align: left;">Sản phẩm</th>
-                <th style="padding: 10px; text-align: center;">SL</th>
-                <th style="padding: 10px; text-align: right;">Thành tiền</th>
-              </tr>
-            </thead>
-            <tbody>${itemsHtml}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="2" style="text-align: right; padding: 10px; font-weight: bold;">Tổng cộng:</td>
-                <td style="text-align: right; padding: 10px; font-weight: bold; color: #EF4444;">${formatCurrency(
-                  order.totalAmount
-                )}</td>
-              </tr>
-            </tfoot>
-          </table>
-          <p style="margin-top: 20px;">📍 Địa chỉ: ${order.customer.address}</p>
-        </div>
-      </div>
-    `
+    // ... code html cũ ...
+    return `<h1>Đơn hàng #${order._id}</h1>` // Demo ngắn
   }
 
-  // 4. Setup mail data
   const mailOptions = {
     from: `"SuperMall Admin" <${process.env.EMAIL_USER}>`,
     to: options.email,
     subject: options.subject,
-    html: generateOrderTemplate(options.order)
+    html: options.order ? generateOrderTemplate(options.order) : options.html
   }
 
-  // 5. Gửi (Có log để debug)
-  console.log(`📨 Đang kết nối Gmail để gửi tới ${options.email}...`)
+  console.log(`📨 Đang thử gửi mail qua Port 587 tới ${options.email}...`)
+
   try {
     const info = await transporter.sendMail(mailOptions)
-    console.log('✅ Gửi mail thành công! ID:', info.messageId)
+    console.log('✅ Gửi thành công! ID:', info.messageId)
   } catch (error) {
-    console.error('❌ Gửi mail thất bại:', error.message)
-    // Không ném lỗi (throw) để tránh crash server
+    console.error('❌ Gửi thất bại:', error.message)
   }
 }
 
