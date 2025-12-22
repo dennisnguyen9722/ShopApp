@@ -42,6 +42,12 @@ const productSchema = new mongoose.Schema(
     // Mảng thông số kỹ thuật (Dynamic)
     specs: [specSchema],
 
+    stock: {
+      type: Number,
+      required: true,
+      default: 0 // Quan trọng: Nếu không nhập thì tự hiểu là 0
+    },
+
     // Biến thể theo kiểu công nghệ
     variants: [variantSchema]
   },
