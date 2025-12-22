@@ -7,7 +7,11 @@ const { protect, checkPermission } = require('../middleware/authMiddleware')
 const PERMISSIONS = require('../config/permissions')
 const sendEmail = require('../utils/sendEmail') // Import gửi mail
 
-// 1. TẠO ĐƠN HÀNG + TRỪ KHO BIẾN THỂ + NOTI + EMAIL
+// ==============================================================================
+// 1. TẠO ĐƠN HÀNG (PUBLIC)
+// - Logic: Check kho (biến thể/thường) -> Trừ kho -> Lưu Noti -> Bắn Socket
+// - ❌ KHÔNG GỬI MAIL Ở ĐÂY (Để App không bị treo)
+// ==============================================================================
 router.post('/', async (req, res) => {
   try {
     const { customer, items, totalAmount, paymentMethod, note, userId } =
@@ -18,9 +22,7 @@ router.post('/', async (req, res) => {
     if (!customer || !customer.phone || !customer.address)
       return res.status(400).json({ message: 'Thiếu thông tin giao hàng' })
 
-    // =======================================================
-    // 🔥 BƯỚC 1: KIỂM TRA TỒN KHO (LOGIC MỚI: CHECK CẢ BIẾN THỂ)
-    // =======================================================
+    // --- BƯỚC 1: KIỂM TRA TỒN KHO (LOGIC FIX BIẾN THỂ) ---
     for (const item of items) {
       const product = await Product.findById(item.product)
       if (!product)
@@ -30,11 +32,9 @@ router.post('/', async (req, res) => {
 
       // TRƯỜNG HỢP 1: SẢN PHẨM CÓ BIẾN THỂ
       if (product.variants && product.variants.length > 0) {
-        // Tìm biến thể khớp với lựa chọn của khách (Màu, Dung lượng...)
         const variant = product.variants.find(
           (v) =>
             v.color === item.variant.color && v.storage === item.variant.storage
-          // Nếu có RAM thì check thêm: && v.ram === item.variant.ram
         )
 
         if (!variant) {
@@ -45,14 +45,13 @@ router.post('/', async (req, res) => {
             })
         }
 
-        // Check kho của biến thể đó
         if (variant.stock < item.quantity) {
           return res.status(400).json({
             message: `Phiên bản "${product.title} - ${variant.color} ${variant.storage}" chỉ còn ${variant.stock}, không đủ giao.`
           })
         }
       }
-      // TRƯỜNG HỢP 2: SẢN PHẨM ĐƠN GIẢN (KHÔNG BIẾN THỂ)
+      // TRƯỜNG HỢP 2: SẢN PHẨM THƯỜNG
       else {
         if (product.stock < item.quantity) {
           return res.status(400).json({
@@ -62,7 +61,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // --- TẠO ĐƠN HÀNG ---
+    // --- BƯỚC 2: TẠO ĐƠN HÀNG ---
     const orderData = {
       customer,
       items,
@@ -73,127 +72,118 @@ router.post('/', async (req, res) => {
     }
     const createdOrder = await Order.create(orderData)
 
-    // --- LƯU NOTI ĐƠN MỚI ---
-    try {
-      await Notification.create({
-        type: 'ORDER',
-        title: 'Đơn hàng mới! 🤑',
-        message: `Đơn #${createdOrder._id
-          .toString()
-          .slice(-6)
-          .toUpperCase()} - ${new Intl.NumberFormat('vi-VN', {
-          style: 'currency',
-          currency: 'VND'
-        }).format(createdOrder.totalAmount)}`,
-        link: `/orders?id=${createdOrder._id}`,
-        isRead: false
-      })
-    } catch (e) {
-      console.error('Lỗi noti order:', e)
-    }
+    // ✅ TRẢ VỀ NGAY LẬP TỨC ĐỂ APP KHÔNG BỊ XOAY VÒNG
+    res.status(201).json(createdOrder)(
+      // ============================================================
+      // CÁC TÁC VỤ CHẠY NGẦM (BACKGROUND) - KHÔNG AWAIT
+      // ============================================================
 
-    // =======================================================
-    // 🔥 BƯỚC 2: TRỪ KHO (LOGIC MỚI: TRỪ ĐÚNG CHỖ)
-    // =======================================================
-    const io = req.app.get('io')
-
-    for (const item of items) {
-      const product = await Product.findById(item.product)
-      let currentStock = 0 // Để dùng cho việc bắn noti cảnh báo
-
-      // 2.1. TRỪ KHO BIẾN THỂ
-      if (product.variants && product.variants.length > 0) {
-        const variantIndex = product.variants.findIndex(
-          (v) =>
-            v.color === item.variant.color && v.storage === item.variant.storage
-        )
-        if (variantIndex > -1) {
-          // Trừ kho biến thể
-          product.variants[variantIndex].stock -= item.quantity
-          currentStock = product.variants[variantIndex].stock
-
-          // Cập nhật lại kho tổng (Optional: Cộng dồn tất cả variant stock lại để hiển thị bên ngoài)
-          product.stock = product.variants.reduce((acc, v) => acc + v.stock, 0)
-        }
-      }
-      // 2.2. TRỪ KHO THƯỜNG
-      else {
-        product.stock -= item.quantity
-        currentStock = product.stock
-      }
-
-      // Tăng số lượng đã bán
-      product.sold = (product.sold || 0) + item.quantity
-      await product.save()
-
-      // 2.3. KIỂM TRA SẮP HẾT HÀNG (Dựa trên stock vừa trừ)
-      if (currentStock <= 5) {
-        // Lưu Noti
+      // 1. Lưu Notification
+      async () => {
         try {
           await Notification.create({
-            type: 'STOCK',
-            title: 'Cảnh báo kho ⚠️',
-            message: `Sản phẩm "${product.title}" ${
-              product.variants.length > 0 ? '(Biến thể)' : ''
-            } sắp hết (còn ${currentStock})!`,
-            link: `/products?id=${product._id}`,
+            type: 'ORDER',
+            title: 'Đơn hàng mới! 🤑',
+            message: `Đơn #${createdOrder._id
+              .toString()
+              .slice(-6)
+              .toUpperCase()} - ${new Intl.NumberFormat('vi-VN', {
+              style: 'currency',
+              currency: 'VND'
+            }).format(createdOrder.totalAmount)}`,
+            link: `/orders?id=${createdOrder._id}`,
             isRead: false
           })
         } catch (e) {
-          console.error('Lỗi noti stock:', e)
+          console.error('Lỗi lưu noti:', e.message)
+        }
+      }
+    )()
+
+    // 2. Trừ kho & Socket
+    const io = req.app.get('io')
+    ;(async () => {
+      try {
+        for (const item of items) {
+          const product = await Product.findById(item.product)
+          let currentStock = 0
+
+          // Trừ kho biến thể
+          if (product.variants && product.variants.length > 0) {
+            const variantIndex = product.variants.findIndex(
+              (v) =>
+                v.color === item.variant.color &&
+                v.storage === item.variant.storage
+            )
+            if (variantIndex > -1) {
+              product.variants[variantIndex].stock -= item.quantity
+              currentStock = product.variants[variantIndex].stock
+              // Update lại stock tổng hiển thị
+              product.stock = product.variants.reduce(
+                (acc, v) => acc + v.stock,
+                0
+              )
+            }
+          }
+          // Trừ kho thường
+          else {
+            product.stock -= item.quantity
+            currentStock = product.stock
+          }
+
+          product.sold = (product.sold || 0) + item.quantity
+          await product.save()
+
+          // Cảnh báo hết hàng
+          if (currentStock <= 5) {
+            // Lưu Noti stock
+            await Notification.create({
+              type: 'STOCK',
+              title: 'Cảnh báo kho ⚠️',
+              message: `Sản phẩm "${product.title}" sắp hết (còn ${currentStock})!`,
+              link: `/products?id=${product._id}`,
+              isRead: false
+            })
+
+            // Bắn Socket
+            if (io) {
+              io.emit('low_stock', {
+                productId: product._id,
+                productName: product.title,
+                stock: currentStock,
+                image: product.image
+              })
+            }
+          }
         }
 
-        // Bắn Socket
+        // Bắn Socket New Order
         if (io) {
-          io.emit('low_stock', {
-            productId: product._id,
-            productName: product.title,
-            stock: currentStock,
-            image: product.image
+          io.emit('new_order', {
+            orderId: createdOrder._id,
+            orderCode: createdOrder._id.toString().slice(-6).toUpperCase(),
+            totalPrice: new Intl.NumberFormat('vi-VN', {
+              style: 'currency',
+              currency: 'VND'
+            }).format(createdOrder.totalAmount),
+            customerName: customer.name
           })
         }
+      } catch (bgError) {
+        console.error('Lỗi background task:', bgError)
       }
-    }
-
-    // --- BẮN SOCKET NEW ORDER ---
-    if (io) {
-      io.emit('new_order', {
-        orderId: createdOrder._id,
-        orderCode: createdOrder._id.toString().slice(-6).toUpperCase(),
-        totalPrice: new Intl.NumberFormat('vi-VN', {
-          style: 'currency',
-          currency: 'VND'
-        }).format(createdOrder.totalAmount),
-        customerName: customer.name
-      })
-    }
-
-    // --- GỬI EMAIL ---
-    try {
-      if (customer.email) {
-        await sendEmail({
-          email: customer.email,
-          subject: `SuperMall - Xác nhận đơn hàng #${createdOrder._id
-            .toString()
-            .slice(-6)
-            .toUpperCase()}`,
-          order: createdOrder
-        })
-        console.log('📧 Đã gửi email cho:', customer.email)
-      }
-    } catch (error) {
-      console.error('❌ Lỗi gửi mail:', error.message)
-    }
-
-    res.status(201).json(createdOrder)
+    })()
   } catch (err) {
     console.error('Lỗi tạo đơn:', err)
-    res.status(500).json({ message: 'Lỗi server khi tạo đơn hàng' })
+    // Nếu chưa res thì trả lỗi
+    if (!res.headersSent)
+      res.status(500).json({ message: 'Lỗi server khi tạo đơn hàng' })
   }
 })
 
-// ... (Giữ nguyên các route GET, PUT bên dưới của file cũ)
-// 2. LẤY DANH SÁCH ĐƠN HÀNG (ADMIN - Cần quyền VIEW)
+// ==============================================================================
+// 2. LẤY DANH SÁCH ĐƠN HÀNG (ADMIN)
+// ==============================================================================
 router.get(
   '/',
   protect,
@@ -210,7 +200,11 @@ router.get(
   }
 )
 
-// 3. CẬP NHẬT TRẠNG THÁI & HOÀN KHO (NẾU HỦY)
+// ==============================================================================
+// 3. CẬP NHẬT TRẠNG THÁI (ADMIN)
+// - Logic: Hoàn kho nếu Hủy
+// - 🔥 GỬI MAIL KHI TRẠNG THÁI LÀ "COMPLETED" (HOÀN THÀNH)
+// ==============================================================================
 router.put(
   '/:id/status',
   protect,
@@ -233,12 +227,12 @@ router.put(
       if (!order)
         return res.status(404).json({ message: 'Không tìm thấy đơn hàng' })
 
-      // HOÀN KHO KHI HỦY
+      // --- LOGIC HOÀN KHO KHI HỦY (CANCELLED) ---
       if (status === 'cancelled' && order.status !== 'cancelled') {
         for (const item of order.items) {
           const product = await Product.findById(item.product)
           if (product) {
-            // Check xem là hoàn kho biến thể hay kho thường
+            // Hoàn kho biến thể
             if (product.variants && product.variants.length > 0) {
               const vIndex = product.variants.findIndex(
                 (v) =>
@@ -247,13 +241,14 @@ router.put(
               )
               if (vIndex > -1) {
                 product.variants[vIndex].stock += item.quantity
-                // Update lại stock tổng
                 product.stock = product.variants.reduce(
                   (acc, v) => acc + v.stock,
                   0
                 )
               }
-            } else {
+            }
+            // Hoàn kho thường
+            else {
               product.stock += item.quantity
             }
 
@@ -263,8 +258,33 @@ router.put(
         }
       }
 
+      // Cập nhật trạng thái
       order.status = status
       await order.save()
+
+      // ============================================================
+      // 🔥 GỬI EMAIL CHỈ KHI TRẠNG THÁI LÀ "COMPLETED"
+      // ============================================================
+      if (status === 'completed' && order.customer && order.customer.email) {
+        console.log(`📧 Đơn hàng ${order._id} đã hoàn thành. Đang gửi mail...`)
+
+        // Chạy ngầm (không await) để Admin Dashboard không bị đơ
+        sendEmail({
+          email: order.customer.email,
+          subject: `SuperMall - Cảm ơn bạn đã mua hàng! (#${order._id
+            .toString()
+            .slice(-6)
+            .toUpperCase()})`,
+          order: order
+        })
+          .then(() => {
+            console.log('✅ Đã gửi mail cảm ơn khách hàng.')
+          })
+          .catch((err) => {
+            console.error('❌ Gửi mail thất bại:', err.message)
+          })
+      }
+
       res.json(order)
     } catch (err) {
       res.status(500).json({ message: err.message })

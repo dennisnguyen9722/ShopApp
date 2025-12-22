@@ -82,17 +82,21 @@ export default function HomeScreen({ navigation }: any) {
 
   // --- HANDLERS ---
 
-  // Xử lý thêm vào giỏ hàng
+  // 🔥 ĐÃ SỬA: Xử lý thêm vào giỏ hàng thông minh hơn
   const handleAddToCart = async (item: any) => {
+    // 1. Kiểm tra xem sản phẩm có biến thể không
+    if (item.variants && item.variants.length > 0) {
+      // Nếu có biến thể -> Chuyển người dùng sang trang chi tiết để chọn
+      navigation.navigate('ProductDetail', { id: item._id })
+      return
+    }
+
+    // 2. Nếu là sản phẩm đơn giản -> Thêm ngay vào giỏ
     try {
       console.log('Đang thêm:', item.title)
-
-      // Gọi Service lưu vào bộ nhớ
       await CartService.addToCart(item, 1, {})
 
-      // Không cần Alert làm phiền, vì Badge đã tự nhảy số và Animation đã chạy
-      // Tuy nhiên nếu thích thì bật dòng dưới:
-      // Alert.alert("SuperMall", "Đã thêm vào giỏ hàng!")
+      // Optional: Rung nhẹ hoặc báo toast nhỏ nếu muốn
     } catch (error) {
       console.log('Lỗi thêm giỏ:', error)
       Alert.alert('Lỗi', 'Không thể thêm sản phẩm này')
@@ -184,7 +188,7 @@ export default function HomeScreen({ navigation }: any) {
               <Image
                 source={{ uri: item.image }}
                 style={styles.bannerImage}
-                contentFit="contain"
+                contentFit="contain" // Hoặc 'cover' tùy chỉnh theo file trước
               />
             </View>
           )}
@@ -268,7 +272,7 @@ export default function HomeScreen({ navigation }: any) {
               onPress={() =>
                 navigation.navigate('ProductDetail', { id: item._id })
               }
-              // 👇 Kết nối sự kiện thêm giỏ hàng
+              // 👇 Kết nối sự kiện thêm giỏ hàng đã sửa
               onAddToCart={() => handleAddToCart(item)}
             />
           )}
@@ -376,7 +380,7 @@ const styles = StyleSheet.create({
     position: 'relative'
   },
 
-  // Badge thông báo (chấm đỏ nhỏ)
+  // Badge thông báo
   notiBadge: {
     position: 'absolute',
     top: 10,
@@ -389,7 +393,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary
   },
 
-  // Badge giỏ hàng (hiển thị số)
+  // Badge giỏ hàng
   cartBadge: {
     position: 'absolute',
     top: -5,
@@ -434,7 +438,7 @@ const styles = StyleSheet.create({
   bannerWrapper: {
     width: width - 40,
     marginHorizontal: 20,
-    aspectRatio: 3,
+    aspectRatio: 3, // Giữ tỷ lệ như bạn đã chỉnh
     overflow: 'hidden',
     backgroundColor: 'transparent',
     shadowColor: '#000',
