@@ -184,7 +184,7 @@ export default function HomeScreen({ navigation }: any) {
               <Image
                 source={{ uri: item.image }}
                 style={styles.bannerImage}
-                contentFit="cover"
+                contentFit="contain"
               />
             </View>
           )}
@@ -434,10 +434,9 @@ const styles = StyleSheet.create({
   bannerWrapper: {
     width: width - 40,
     marginHorizontal: 20,
-    height: 160,
-    borderRadius: 20,
+    aspectRatio: 3,
     overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,

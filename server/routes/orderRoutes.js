@@ -103,6 +103,26 @@ router.post('/', async (req, res) => {
           console.error('Lỗi lưu notification stock:', notiError)
         }
 
+        // ============================================================
+        // 🔥 3. GỬI EMAIL CHO KHÁCH HÀNG (CHÈN SAU KHI LƯU NOTIFICATION)
+        // ============================================================
+        try {
+          if (customer.email) {
+            await sendEmail({
+              email: customer.email,
+              subject: `SuperMall - Xác nhận đơn hàng #${createdOrder._id
+                .toString()
+                .slice(-6)
+                .toUpperCase()}`,
+              order: createdOrder
+            })
+            console.log('📧 Đã gửi email xác nhận cho:', customer.email)
+          }
+        } catch (emailError) {
+          console.error('❌ Lỗi gửi email:', emailError.message)
+          // Không chặn luồng chính, chỉ log lỗi
+        }
+
         // Bắn Socket Low Stock (Real-time)
         if (io) {
           io.emit('low_stock', {
@@ -208,11 +228,9 @@ router.put(
           const product = await Product.findById(item.product)
           if (product) {
             if (product.stock < item.quantity) {
-              return res
-                .status(400)
-                .json({
-                  message: `Không thể khôi phục đơn, sản phẩm ${product.title} đã hết hàng!`
-                })
+              return res.status(400).json({
+                message: `Không thể khôi phục đơn, sản phẩm ${product.title} đã hết hàng!`
+              })
             }
             product.stock -= item.quantity
             product.sold += item.quantity
