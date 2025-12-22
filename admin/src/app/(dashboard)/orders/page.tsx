@@ -7,13 +7,18 @@ import {
   Eye,
   Loader2,
   Package,
-  Printer, // Icon máy in
+  Printer,
   Search,
-  Filter
+  Filter,
+  MapPin,
+  User,
+  Phone,
+  Mail,
+  Calendar,
+  FileText
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSearchParams } from 'next/navigation'
-// 👇 Import PDF Library
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { InvoicePDF, InvoiceOrder } from '@/components/InvoicePDF'
 
@@ -33,8 +38,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-  DialogDescription
+  DialogTitle
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -43,28 +47,26 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedOrder, setSelectedOrder] = useState<any>(null) // Order chi tiết để xem
+  const [selectedOrder, setSelectedOrder] = useState<any>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [isClient, setIsClient] = useState(false) // Check client-side rendering
+  const [isClient, setIsClient] = useState(false)
 
-  // Filter States
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
 
-  // Hook lấy params từ URL (để mở modal từ Notification)
   const searchParams = useSearchParams()
   const notifyOrderId = searchParams.get('id')
 
   useEffect(() => {
-    setIsClient(true) // Đánh dấu đã render ở client
+    setIsClient(true)
     fetchOrders()
   }, [])
 
-  // Tự động mở Modal khi có ID trên URL (từ thông báo)
   useEffect(() => {
     if (notifyOrderId && orders.length > 0) {
       const target = orders.find((o) => o._id === notifyOrderId)
@@ -87,22 +89,62 @@ export default function OrdersPage() {
   }
 
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+    // Kiểm tra logic chuyển trạng thái hợp lệ
+    const currentStatus = selectedOrder?.status
+    const statusFlow: { [key: string]: string[] } = {
+      pending: ['confirmed', 'cancelled'],
+      confirmed: ['shipping', 'cancelled'],
+      shipping: ['completed', 'cancelled'],
+      completed: [],
+      cancelled: []
+    }
+
+    // Không cho phép chuyển từ completed hoặc cancelled
+    if (currentStatus === 'completed') {
+      toast.error('Không thể thay đổi trạng thái đơn hàng đã hoàn thành')
+      return
+    }
+
+    if (currentStatus === 'cancelled') {
+      toast.error('Không thể thay đổi trạng thái đơn hàng đã hủy')
+      return
+    }
+
+    // Kiểm tra xem có được phép chuyển sang trạng thái mới không
+    if (currentStatus && !statusFlow[currentStatus]?.includes(newStatus)) {
+      toast.error(
+        `Không thể chuyển từ "${getStatusText(
+          currentStatus
+        )}" sang "${getStatusText(newStatus)}"`
+      )
+      return
+    }
+
     try {
       await axiosClient.put(`/orders/${orderId}/status`, { status: newStatus })
       toast.success('Cập nhật trạng thái thành công')
 
-      // Update UI cục bộ
       setOrders((prev) =>
         prev.map((o) => (o._id === orderId ? { ...o, status: newStatus } : o))
       )
 
-      // Nếu đang mở modal chi tiết thì update luôn selectedOrder
       if (selectedOrder && selectedOrder._id === orderId) {
         setSelectedOrder((prev: any) => ({ ...prev, status: newStatus }))
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Lỗi cập nhật trạng thái')
     }
+  }
+
+  const getStatusText = (status: string) => {
+    const statusMap: { [key: string]: string } = {
+      pending: 'Chờ xử lý',
+      confirmed: 'Đã xác nhận',
+      shipping: 'Đang giao',
+      completed: 'Hoàn thành',
+      cancelled: 'Đã hủy'
+    }
+    return statusMap[status] || status
   }
 
   const handleViewOrder = (order: any) => {
@@ -153,7 +195,6 @@ export default function OrdersPage() {
     }
   }
 
-  // Filter Logic
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order._id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -273,7 +314,6 @@ export default function OrdersPage() {
                             <Eye className="w-4 h-4 text-gray-500 hover:text-indigo-600" />
                           </Button>
 
-                          {/* 👇 NÚT IN HÓA ĐƠN PDF */}
                           {isClient && (
                             <PDFDownloadLink
                               document={
@@ -309,226 +349,368 @@ export default function OrdersPage() {
         </CardContent>
       </Card>
 
-      {/* MODAL CHI TIẾT ĐƠN HÀNG */}
+      {/* MODAL CHI TIẾT ĐƠN HÀNG - IMPROVED */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl flex items-center gap-2">
-              Chi tiết đơn hàng #{selectedOrder?._id.slice(-6).toUpperCase()}
-              {selectedOrder && getStatusBadge(selectedOrder.status)}
-            </DialogTitle>
-            <DialogDescription>
-              Đặt ngày{' '}
-              {selectedOrder &&
-                new Date(selectedOrder.createdAt).toLocaleString('vi-VN')}
-            </DialogDescription>
+        <DialogContent className="max-w-[95vw] lg:max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0">
+          {/* HEADER */}
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1.5">
+                <DialogTitle className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                  Đơn hàng #{selectedOrder?._id.slice(-6).toUpperCase()}
+                  {selectedOrder && getStatusBadge(selectedOrder.status)}
+                </DialogTitle>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Calendar className="w-4 h-4" />
+                  <span>
+                    {selectedOrder &&
+                      new Date(selectedOrder.createdAt).toLocaleString(
+                        'vi-VN',
+                        {
+                          dateStyle: 'full',
+                          timeStyle: 'short'
+                        }
+                      )}
+                  </span>
+                </div>
+              </div>
+            </div>
           </DialogHeader>
 
           {selectedOrder && (
-            <div className="grid gap-6 py-4">
-              {/* Thông tin khách & Giao hàng */}
-              <div className="grid md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border">
-                <div>
-                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                    <Package className="w-4 h-4" /> Thông tin khách hàng
-                  </h4>
-                  <p className="text-sm">
-                    <span className="text-gray-500">Họ tên:</span>{' '}
-                    {selectedOrder.customer.name}
-                  </p>
-                  <p className="text-sm">
-                    <span className="text-gray-500">SĐT:</span>{' '}
-                    {selectedOrder.customer.phone}
-                  </p>
-                  <p className="text-sm">
-                    <span className="text-gray-500">Email:</span>{' '}
-                    {selectedOrder.customer.email || 'Không có'}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-semibold mb-2">Địa chỉ giao hàng</h4>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {selectedOrder.customer.address}
-                  </p>
-                  <p className="text-sm mt-2">
-                    <span className="text-gray-500">Ghi chú:</span>{' '}
-                    {selectedOrder.note || 'Không có'}
-                  </p>
-                </div>
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+              {/* THÔNG TIN KHÁCH HÀNG & ĐỊA CHỈ */}
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Khách hàng */}
+                <Card className="border-2 border-gray-100 shadow-sm">
+                  <CardHeader className="pb-3 bg-gradient-to-br from-blue-50 to-indigo-50">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
+                      <User className="w-5 h-5 text-indigo-600" />
+                      Thông tin khách hàng
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-5 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <User className="w-5 h-5 mt-0.5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Họ tên</p>
+                        <p className="font-semibold text-base text-gray-900">
+                          {selectedOrder.customer.name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Phone className="w-5 h-5 mt-0.5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">
+                          Số điện thoại
+                        </p>
+                        <p className="font-medium text-base text-gray-900">
+                          {selectedOrder.customer.phone}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Mail className="w-5 h-5 mt-0.5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Email</p>
+                        <p className="font-medium text-base text-gray-900">
+                          {selectedOrder.customer.email || 'Không có'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Địa chỉ giao hàng */}
+                <Card className="border-2 border-gray-100 shadow-sm">
+                  <CardHeader className="pb-3 bg-gradient-to-br from-green-50 to-emerald-50">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
+                      <MapPin className="w-5 h-5 text-green-600" />
+                      Địa chỉ giao hàng
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-5 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="w-5 h-5 mt-0.5 text-gray-400 flex-shrink-0" />
+                      <p className="text-base text-gray-900 leading-relaxed">
+                        {selectedOrder.customer.address}
+                      </p>
+                    </div>
+                    <Separator />
+                    <div className="flex items-start gap-3">
+                      <FileText className="w-5 h-5 mt-0.5 text-gray-400 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Ghi chú</p>
+                        <p className="text-base text-gray-700 italic">
+                          {selectedOrder.note || 'Không có ghi chú'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
-              {/* Danh sách sản phẩm */}
-              <div>
-                <h4 className="font-semibold mb-3">Sản phẩm đã đặt</h4>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-gray-100">
-                      <TableRow>
-                        <TableHead>Sản phẩm</TableHead>
-                        <TableHead className="text-center">SL</TableHead>
-                        <TableHead className="text-right">Đơn giá</TableHead>
-                        <TableHead className="text-right">Thành tiền</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedOrder.items.map((item: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gray-100 rounded border overflow-hidden">
-                                {item.productImage && (
-                                  <img
-                                    src={item.productImage}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">
-                                  {item.productName}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {item.variant?.color} {item.variant?.storage}{' '}
-                                  {item.variant?.ram}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {item.quantity}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(item.price)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(item.price * item.quantity)}
-                          </TableCell>
+              {/* DANH SÁCH SẢN PHẨM */}
+              <Card className="border-2 border-gray-100 shadow-sm">
+                <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
+                  <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
+                    <Package className="w-5 h-5 text-purple-600" />
+                    Sản phẩm đã đặt ({selectedOrder.items.length} món)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead className="w-[45%] text-base">
+                            Sản phẩm
+                          </TableHead>
+                          <TableHead className="text-center w-[15%] text-base">
+                            Số lượng
+                          </TableHead>
+                          <TableHead className="text-right w-[20%] text-base">
+                            Đơn giá
+                          </TableHead>
+                          <TableHead className="text-right w-[20%] text-base">
+                            Thành tiền
+                          </TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="flex justify-end mt-4">
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">
-                      Tổng tiền hàng:{' '}
-                      <span className="text-gray-900 font-medium">
-                        {formatCurrency(selectedOrder.totalAmount)}
-                      </span>
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Phí vận chuyển:{' '}
-                      <span className="text-gray-900 font-medium">0 ₫</span>
-                    </p>
-                    <p className="text-xl font-bold text-indigo-600 mt-1">
-                      {formatCurrency(selectedOrder.totalAmount)}
-                    </p>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedOrder.items.map((item: any, idx: number) => (
+                          <TableRow key={idx} className="hover:bg-gray-50/50">
+                            <TableCell className="py-4">
+                              <div className="flex items-center gap-4">
+                                <div className="w-20 h-20 bg-gray-100 rounded-lg border-2 border-gray-200 overflow-hidden flex-shrink-0">
+                                  {item.productImage && (
+                                    <img
+                                      src={item.productImage}
+                                      alt={item.productName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-base text-gray-900 mb-1.5">
+                                    {item.productName}
+                                  </p>
+                                  <p className="text-sm text-gray-500">
+                                    {[
+                                      item.variant?.color,
+                                      item.variant?.storage,
+                                      item.variant?.ram
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' • ')}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="inline-flex items-center justify-center w-12 h-12 bg-indigo-50 text-indigo-700 font-bold rounded-lg text-base">
+                                {item.quantity}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-medium text-base text-gray-700">
+                              {formatCurrency(item.price)}
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-base text-gray-900">
+                              {formatCurrency(item.price * item.quantity)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                </div>
-              </div>
 
-              {/* Hành động cập nhật trạng thái */}
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-3">
-                  Cập nhật trạng thái đơn hàng
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant={
-                      selectedOrder.status === 'pending' ? 'default' : 'outline'
-                    }
-                    size="sm"
-                    className={
-                      selectedOrder.status === 'pending'
-                        ? 'bg-yellow-500 hover:bg-yellow-600'
-                        : ''
-                    }
-                    onClick={() =>
-                      handleUpdateStatus(selectedOrder._id, 'pending')
-                    }
-                  >
-                    Chờ xử lý
-                  </Button>
-                  <Button
-                    variant={
-                      selectedOrder.status === 'confirmed'
-                        ? 'default'
-                        : 'outline'
-                    }
-                    size="sm"
-                    className={
-                      selectedOrder.status === 'confirmed'
-                        ? 'bg-blue-600 hover:bg-blue-700'
-                        : ''
-                    }
-                    onClick={() =>
-                      handleUpdateStatus(selectedOrder._id, 'confirmed')
-                    }
-                  >
-                    Xác nhận
-                  </Button>
-                  <Button
-                    variant={
-                      selectedOrder.status === 'shipping'
-                        ? 'default'
-                        : 'outline'
-                    }
-                    size="sm"
-                    className={
-                      selectedOrder.status === 'shipping'
-                        ? 'bg-purple-600 hover:bg-purple-700'
-                        : ''
-                    }
-                    onClick={() =>
-                      handleUpdateStatus(selectedOrder._id, 'shipping')
-                    }
-                  >
-                    Đang giao
-                  </Button>
-                  <Button
-                    variant={
-                      selectedOrder.status === 'completed'
-                        ? 'default'
-                        : 'outline'
-                    }
-                    size="sm"
-                    className={
-                      selectedOrder.status === 'completed'
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : ''
-                    }
-                    onClick={() =>
-                      handleUpdateStatus(selectedOrder._id, 'completed')
-                    }
-                  >
-                    Hoàn thành
-                  </Button>
-                  <Button
-                    variant={
-                      selectedOrder.status === 'cancelled'
-                        ? 'default'
-                        : 'outline'
-                    }
-                    size="sm"
-                    className={
-                      selectedOrder.status === 'cancelled'
-                        ? 'bg-red-600 hover:bg-red-700'
-                        : ''
-                    }
-                    onClick={() => {
-                      if (
-                        confirm(
-                          'Bạn có chắc chắn muốn hủy đơn này? Kho sẽ được hoàn lại.'
-                        )
-                      ) {
-                        handleUpdateStatus(selectedOrder._id, 'cancelled')
+                  {/* TỔNG TIỀN */}
+                  <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 border-t-2 border-gray-200">
+                    <div className="max-w-md ml-auto space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-gray-600">
+                          Tổng tiền hàng
+                        </span>
+                        <span className="font-semibold text-base text-gray-900">
+                          {formatCurrency(selectedOrder.totalAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-gray-600">
+                          Phí vận chuyển
+                        </span>
+                        <span className="font-semibold text-base text-green-600">
+                          Miễn phí
+                        </span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between items-center">
+                        <span className="text-xl font-bold text-gray-900">
+                          Tổng cộng
+                        </span>
+                        <span className="text-3xl font-bold text-indigo-600">
+                          {formatCurrency(selectedOrder.totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* CẬP NHẬT TRẠNG THÁI */}
+              <Card className="border-2 border-indigo-100 shadow-sm">
+                <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50">
+                  <CardTitle className="text-lg text-gray-800">
+                    Cập nhật trạng thái đơn hàng
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-5">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <Button
+                      variant={
+                        selectedOrder.status === 'pending'
+                          ? 'default'
+                          : 'outline'
                       }
-                    }}
-                  >
-                    Hủy đơn
-                  </Button>
-                </div>
-              </div>
+                      size="lg"
+                      disabled={
+                        selectedOrder.status === 'completed' ||
+                        selectedOrder.status === 'cancelled'
+                      }
+                      className={
+                        selectedOrder.status === 'pending'
+                          ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                          : 'hover:bg-yellow-50 hover:border-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }
+                      onClick={() =>
+                        handleUpdateStatus(selectedOrder._id, 'pending')
+                      }
+                    >
+                      Chờ xử lý
+                    </Button>
+                    <Button
+                      variant={
+                        selectedOrder.status === 'confirmed'
+                          ? 'default'
+                          : 'outline'
+                      }
+                      size="lg"
+                      disabled={
+                        selectedOrder.status === 'completed' ||
+                        selectedOrder.status === 'cancelled' ||
+                        (selectedOrder.status !== 'pending' &&
+                          selectedOrder.status !== 'confirmed')
+                      }
+                      className={
+                        selectedOrder.status === 'confirmed'
+                          ? 'bg-blue-600 hover:bg-blue-700'
+                          : 'hover:bg-blue-50 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }
+                      onClick={() =>
+                        handleUpdateStatus(selectedOrder._id, 'confirmed')
+                      }
+                    >
+                      Xác nhận
+                    </Button>
+                    <Button
+                      variant={
+                        selectedOrder.status === 'shipping'
+                          ? 'default'
+                          : 'outline'
+                      }
+                      size="lg"
+                      disabled={
+                        selectedOrder.status === 'completed' ||
+                        selectedOrder.status === 'cancelled' ||
+                        (selectedOrder.status !== 'confirmed' &&
+                          selectedOrder.status !== 'shipping')
+                      }
+                      className={
+                        selectedOrder.status === 'shipping'
+                          ? 'bg-purple-600 hover:bg-purple-700'
+                          : 'hover:bg-purple-50 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }
+                      onClick={() =>
+                        handleUpdateStatus(selectedOrder._id, 'shipping')
+                      }
+                    >
+                      Đang giao
+                    </Button>
+                    <Button
+                      variant={
+                        selectedOrder.status === 'completed'
+                          ? 'default'
+                          : 'outline'
+                      }
+                      size="lg"
+                      disabled={
+                        selectedOrder.status === 'completed' ||
+                        selectedOrder.status === 'cancelled' ||
+                        selectedOrder.status !== 'shipping'
+                      }
+                      className={
+                        selectedOrder.status === 'completed'
+                          ? 'bg-green-600 hover:bg-green-700'
+                          : 'hover:bg-green-50 hover:border-green-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }
+                      onClick={() =>
+                        handleUpdateStatus(selectedOrder._id, 'completed')
+                      }
+                    >
+                      Hoàn thành
+                    </Button>
+                    <Button
+                      variant={
+                        selectedOrder.status === 'cancelled'
+                          ? 'default'
+                          : 'outline'
+                      }
+                      size="lg"
+                      disabled={
+                        selectedOrder.status === 'completed' ||
+                        selectedOrder.status === 'cancelled'
+                      }
+                      className={
+                        selectedOrder.status === 'cancelled'
+                          ? 'bg-red-600 hover:bg-red-700'
+                          : 'hover:bg-red-50 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }
+                      onClick={() => {
+                        if (
+                          confirm(
+                            'Bạn có chắc chắn muốn hủy đơn này? Kho sẽ được hoàn lại.'
+                          )
+                        ) {
+                          handleUpdateStatus(selectedOrder._id, 'cancelled')
+                        }
+                      }}
+                    >
+                      Hủy đơn
+                    </Button>
+                  </div>
+
+                  {/* Hướng dẫn trạng thái */}
+                  <div className="mt-5 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-800 font-medium mb-2">
+                      📌 Quy trình xử lý đơn hàng:
+                    </p>
+                    <div className="flex items-center gap-2 text-sm text-blue-700 flex-wrap">
+                      <span className="font-semibold">Chờ xử lý</span>
+                      <span>→</span>
+                      <span className="font-semibold">Xác nhận</span>
+                      <span>→</span>
+                      <span className="font-semibold">Đang giao</span>
+                      <span>→</span>
+                      <span className="font-semibold">Hoàn thành</span>
+                      <span className="mx-2">|</span>
+                      <span className="text-red-600 font-semibold">
+                        Có thể hủy bất kỳ lúc nào trước khi hoàn thành
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </DialogContent>

@@ -12,11 +12,12 @@ import {
 // Đăng ký Font tiếng Việt (Roboto)
 Font.register({
   family: 'Roboto',
-  src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/Roboto-Regular.ttf'
+  src: '/fonts/Roboto-Regular.ttf' // Đọc từ public/fonts/Roboto-Regular.ttf
 })
+
 Font.register({
   family: 'RobotoBold',
-  src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/Roboto-Bold.ttf'
+  src: '/fonts/Roboto-Bold.ttf' // Đọc từ public/fonts/Roboto-Bold.ttf
 })
 
 // --- 👇 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU (TYPES) ---
