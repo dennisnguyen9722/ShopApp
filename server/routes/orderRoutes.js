@@ -155,7 +155,7 @@ router.get(
   }
 )
 
-// 3. CẬP NHẬT TRẠNG THÁI (ADMIN - Cần quyền UPDATE_STATUS)
+// 3. CẬP NHẬT TRẠNG THÁI & HOÀN KHO (NẾU HỦY)
 router.put(
   '/:id/status',
   protect,
@@ -175,16 +175,59 @@ router.put(
         return res.status(400).json({ message: 'Trạng thái không hợp lệ' })
       }
 
-      const order = await Order.findByIdAndUpdate(
-        req.params.id,
-        { status },
-        { new: true }
-      )
-
-      if (!order)
+      // 1. Tìm đơn hàng hiện tại
+      const order = await Order.findById(req.params.id)
+      if (!order) {
         return res.status(404).json({ message: 'Không tìm thấy đơn hàng' })
+      }
+
+      // 🔥 2. LOGIC HOÀN KHO: Nếu chuyển sang "cancelled" và đơn chưa bị hủy trước đó
+      if (status === 'cancelled' && order.status !== 'cancelled') {
+        console.log(`🔄 Đang hoàn kho cho đơn hàng ${order._id}...`)
+
+        for (const item of order.items) {
+          const product = await Product.findById(item.product)
+          if (product) {
+            // Cộng lại tồn kho
+            product.stock += item.quantity
+            // Trừ đi số lượng đã bán (vì bán hụt)
+            product.sold = Math.max(0, (product.sold || 0) - item.quantity)
+
+            await product.save()
+            console.log(
+              `   + Hoàn ${item.quantity} cái cho: ${product.title} (Kho mới: ${product.stock})`
+            )
+          }
+        }
+      }
+
+      // ⚠️ Logic phụ (Optional): Nếu lỡ hủy nhầm, giờ muốn khôi phục lại (Re-open)
+      // Nếu từ "cancelled" chuyển sang trạng thái khác -> Lại phải trừ kho tiếp
+      if (order.status === 'cancelled' && status !== 'cancelled') {
+        for (const item of order.items) {
+          const product = await Product.findById(item.product)
+          if (product) {
+            if (product.stock < item.quantity) {
+              return res
+                .status(400)
+                .json({
+                  message: `Không thể khôi phục đơn, sản phẩm ${product.title} đã hết hàng!`
+                })
+            }
+            product.stock -= item.quantity
+            product.sold += item.quantity
+            await product.save()
+          }
+        }
+      }
+
+      // 3. Cập nhật trạng thái mới
+      order.status = status
+      await order.save() // Lưu lại thay đổi
+
       res.json(order)
     } catch (err) {
+      console.error(err)
       res.status(500).json({ message: err.message })
     }
   }
