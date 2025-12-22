@@ -7,9 +7,7 @@ import {
   Loader2,
   Image as ImageIcon,
   X,
-  MoreHorizontal,
   UploadCloud,
-  Save,
   Check
 } from 'lucide-react'
 
@@ -33,13 +31,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from '@/components/ui/popover'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils' // Đảm bảo bạn có util này (thường mặc định của shadcn)
 
 // --- TYPES ---
 export interface TechVariant {
@@ -66,6 +58,7 @@ export interface ProductFormData {
   image: string
   description: string
   content: string
+  stock: number
   specs: TechSpec[]
   variants: TechVariant[]
 }
@@ -101,6 +94,7 @@ export function ProductForm({
     image: '',
     description: '',
     content: '',
+    stock: 0,
     specs: [],
     variants: []
   }
@@ -131,6 +125,7 @@ export function ProductForm({
           ...defaultForm,
           ...initialData,
           brand: brandId,
+          stock: initialData.stock || 0,
           specs: initialData.specs || [],
           variants: initialData.variants || []
         })
@@ -204,6 +199,7 @@ export function ProductForm({
     setIsSubmitting(false)
   }
 
+  // 👇 ĐÂY LÀ HÀM BỊ THIẾU NÈ
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -279,6 +275,7 @@ export function ProductForm({
                           <img
                             src={formData.image}
                             className="w-full h-full object-contain p-2"
+                            alt="Preview"
                           />
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <span className="text-white font-medium flex items-center gap-2">
@@ -373,10 +370,11 @@ export function ProductForm({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Giá bán */}
                       <div className="grid gap-2 relative">
                         <Label>
-                          Giá bán (VND) <span className="text-red-500">*</span>
+                          Giá bán <span className="text-red-500">*</span>
                         </Label>
                         <div className="relative">
                           <Input
@@ -402,8 +400,10 @@ export function ProductForm({
                           )}
                         </div>
                       </div>
+
+                      {/* Giá niêm yết */}
                       <div className="grid gap-2">
-                        <Label>Giá niêm yết (Gạch ngang)</Label>
+                        <Label>Giá niêm yết</Label>
                         <Input
                           type="number"
                           value={formData.originalPrice}
@@ -414,6 +414,28 @@ export function ProductForm({
                             })
                           }
                           className="h-10 border-slate-200 text-slate-500"
+                        />
+                      </div>
+
+                      {/* Tồn kho */}
+                      <div className="grid gap-2">
+                        <Label>
+                          Tồn kho{' '}
+                          <span className="text-slate-400 font-normal text-xs">
+                            (Đơn)
+                          </span>
+                        </Label>
+                        <Input
+                          type="number"
+                          value={formData.stock}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              stock: Number(e.target.value)
+                            })
+                          }
+                          placeholder="0"
+                          className="h-10 border-slate-200 font-medium"
                         />
                       </div>
                     </div>
@@ -437,7 +459,7 @@ export function ProductForm({
                 </div>
               </TabsContent>
 
-              {/* TAB 2: SPECS (Makeover) */}
+              {/* TAB 2: SPECS */}
               <TabsContent value="specs" className="space-y-4 mt-0">
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <h3 className="font-semibold text-slate-800 flex items-center gap-2">
@@ -554,11 +576,11 @@ export function ProductForm({
                 </div>
               </TabsContent>
 
-              {/* TAB 3: VARIANTS (Makeover) */}
+              {/* TAB 3: VARIANTS */}
               <TabsContent value="variants" className="space-y-4 mt-0">
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                   <div className="grid grid-cols-12 gap-4 items-end">
-                    {/* Upload ảnh nhỏ gọn hơn */}
+                    {/* Upload ảnh */}
                     <div className="col-span-12 md:col-span-2">
                       <Label className="text-xs text-slate-500 mb-1.5 block">
                         Ảnh màu
@@ -576,6 +598,7 @@ export function ProductForm({
                             <img
                               src={tempVariant.image}
                               className="w-full h-full object-cover"
+                              alt="Variant Preview"
                             />
                             <div className="absolute inset-0 bg-black/30 hidden group-hover:flex items-center justify-center text-white">
                               <Plus size={20} />
@@ -597,7 +620,7 @@ export function ProductForm({
                       />
                     </div>
 
-                    {/* Input fields gọn gàng */}
+                    {/* Inputs */}
                     <div className="col-span-12 md:col-span-10 grid grid-cols-4 gap-4">
                       <div className="col-span-1">
                         <Label className="text-xs text-slate-500 mb-1.5 block">
@@ -753,6 +776,7 @@ export function ProductForm({
                                     <img
                                       src={v.image}
                                       className="w-full h-full object-cover"
+                                      alt=""
                                     />
                                   ) : (
                                     <ImageIcon className="w-4 h-4 text-slate-300" />

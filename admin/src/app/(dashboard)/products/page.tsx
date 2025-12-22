@@ -10,22 +10,13 @@ import {
   Package,
   Loader2,
   Image as ImageIcon,
-  Smartphone,
   ChevronLeft,
-  ChevronRight,
-  Search
+  ChevronRight
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input' // Thêm Input tìm kiếm nếu thích
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -88,6 +79,14 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts(currentPage)
   }, [currentPage])
+
+  // 👇 HÀM TÍNH TỔNG TỒN KHO (Helper)
+  const calculateTotalStock = (p: any) => {
+    if (p.variants && p.variants.length > 0) {
+      return p.variants.reduce((acc: number, v: any) => acc + (v.stock || 0), 0)
+    }
+    return p.stock || 0
+  }
 
   // Handlers
   const handleAddNew = () => {
@@ -153,7 +152,6 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          {/* Nếu thích có thể thêm ô tìm kiếm ở đây */}
           <Button
             onClick={handleAddNew}
             className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-all"
@@ -179,11 +177,12 @@ export default function ProductsPage() {
                   <TableHead className="text-center py-4 font-semibold text-slate-700">
                     Danh mục
                   </TableHead>
+                  {/* 👇 ĐÃ THÊM CỘT TỒN KHO */}
                   <TableHead className="text-center py-4 font-semibold text-slate-700">
-                    Thương hiệu
+                    Tồn kho
                   </TableHead>
                   <TableHead className="text-center py-4 font-semibold text-slate-700">
-                    Phiên bản
+                    Thương hiệu
                   </TableHead>
                   <TableHead className="text-right py-4 pr-6 font-semibold text-slate-700">
                     Thao tác
@@ -214,80 +213,105 @@ export default function ProductsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  products.map((p) => (
-                    <TableRow
-                      key={p._id}
-                      className="hover:bg-slate-50/60 transition-colors group"
-                    >
-                      <TableCell className="pl-6 py-3">
-                        <div className="w-14 h-14 rounded-lg border bg-white flex items-center justify-center overflow-hidden shadow-sm">
-                          {p.image ? (
-                            <img
-                              src={p.image}
-                              className="w-full h-full object-contain p-1"
-                            />
-                          ) : (
-                            <ImageIcon className="w-6 h-6 text-slate-300" />
+                  products.map((p) => {
+                    // Tính tồn kho
+                    const totalStock = calculateTotalStock(p)
+
+                    return (
+                      <TableRow
+                        key={p._id}
+                        className="hover:bg-slate-50/60 transition-colors group"
+                      >
+                        <TableCell className="pl-6 py-3">
+                          <div className="w-14 h-14 rounded-lg border bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                            {p.image ? (
+                              <img
+                                src={p.image}
+                                className="w-full h-full object-contain p-1"
+                                alt=""
+                              />
+                            ) : (
+                              <ImageIcon className="w-6 h-6 text-slate-300" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900 py-3">
+                          <div
+                            className="line-clamp-2 max-w-[300px]"
+                            title={p.title}
+                          >
+                            {p.title}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-indigo-600 font-bold py-3">
+                          {formatCurrency(p.price)}
+                        </TableCell>
+                        <TableCell className="text-center py-3">
+                          <Badge
+                            variant="secondary"
+                            className="capitalize bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          >
+                            {p.category}
+                          </Badge>
+                        </TableCell>
+
+                        {/* 👇 HIỂN THỊ TỒN KHO */}
+                        <TableCell className="text-center py-3">
+                          <span
+                            className={`font-bold ${
+                              totalStock === 0
+                                ? 'text-red-500'
+                                : totalStock <= 5
+                                ? 'text-yellow-600'
+                                : 'text-slate-700'
+                            }`}
+                          >
+                            {totalStock}
+                          </span>
+                          {p.variants?.length > 0 && (
+                            <span className="block text-[10px] text-slate-400">
+                              ({p.variants.length} phiên bản)
+                            </span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-900 py-3">
-                        <div
-                          className="line-clamp-2 max-w-[300px]"
-                          title={p.title}
-                        >
-                          {p.title}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-indigo-600 font-bold py-3">
-                        {formatCurrency(p.price)}
-                      </TableCell>
-                      <TableCell className="text-center py-3">
-                        <Badge
-                          variant="secondary"
-                          className="capitalize bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        >
-                          {p.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center py-3">
-                        <span className="text-sm font-medium text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 shadow-sm inline-block min-w-[60px]">
-                          {typeof p.brand === 'object' ? p.brand?.name : 'N/A'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center py-3">
-                        <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-                          {p.variants?.length || 0}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right pr-6 py-3">
-                        <div className="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(p)}
-                            className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(p._id)}
-                            className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+
+                        <TableCell className="text-center py-3">
+                          <span className="text-sm font-medium text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 shadow-sm inline-block min-w-[60px]">
+                            {typeof p.brand === 'object'
+                              ? p.brand?.name
+                              : 'N/A'}
+                          </span>
+                        </TableCell>
+
+                        <TableCell className="text-right pr-6 py-3">
+                          <div className="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(p)}
+                              className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(p._id)}
+                              className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
 
-          {/* 👇 PHÂN TRANG: Đã làm đẹp và gom nhóm */}
+          {/* Footer Pagination */}
           <div className="border-t bg-slate-50/50 p-4 flex items-center justify-end gap-6">
             <span className="text-sm text-slate-500 font-medium">
               Trang{' '}

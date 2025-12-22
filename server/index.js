@@ -20,6 +20,7 @@ const voucherRoutes = require('./routes/voucherRoutes')
 const statRoutes = require('./routes/statRoutes')
 const reviewRoutes = require('./routes/reviewRoutes')
 const settingRoutes = require('./routes/settingRoutes')
+const notificationRoutes = require('./routes/notificationRoutes')
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -86,6 +87,7 @@ app.use('/api/vouchers', voucherRoutes)
 app.use('/api/stats', statRoutes)
 app.use('/api/reviews', reviewRoutes)
 app.use('/api/settings', settingRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // ✅ 404 HANDLER - Đặt CUỐI CÙNG, sau tất cả routes
 app.use((req, res) => {

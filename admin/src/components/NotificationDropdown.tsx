@@ -15,20 +15,19 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import axiosClient from '@/lib/axiosClient' // 👇 NHỚ IMPORT AXIOS
 
-// 👇 SỬA ĐOẠN NÀY:
-// Lấy URL từ env (đang có đuôi /api), dùng .replace để cắt bỏ đuôi /api đi
-// Kết quả sẽ là: https://supermall-api.onrender.com (Chuẩn cho Socket)
+// URL Socket
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'
 const SOCKET_URL = API_URL.replace('/api', '')
 
 interface Notification {
-  id: string
+  _id: string // MongoDB dùng _id
   type: 'ORDER' | 'STOCK' | 'REVIEW'
   title: string
   message: string
   link: string
-  time: string
+  createdAt: string
   isRead: boolean
 }
 
@@ -41,57 +40,67 @@ export function NotificationDropdown() {
   const socketRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // 1. FETCH LỊCH SỬ THÔNG BÁO (Lúc F5 trang)
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const { data } = await axiosClient.get('/notifications')
+        setNotifications(data)
+        // Đếm số chưa đọc (nếu muốn) hoặc hiển thị chấm đỏ nếu có tin mới
+        setUnreadCount(data.filter((n: any) => !n.isRead).length)
+      } catch (error) {
+        console.log('Lỗi lấy thông báo:', error)
+      }
+    }
+    fetchNotifications()
+  }, [])
+
+  // 2. HÀM XỬ LÝ KHI CÓ SOCKET MỚI
   const handleNewNotification = useCallback((notif: Notification) => {
     try {
       audioRef.current?.play().catch(() => {})
     } catch (e) {}
 
+    // Chèn vào đầu danh sách
     setNotifications((prev) => [notif, ...prev])
     setUnreadCount((prev) => prev + 1)
   }, [])
 
+  // 3. KẾT NỐI SOCKET
   useEffect(() => {
     if (typeof window !== 'undefined') {
       audioRef.current = new Audio('/sounds/notification.mp3')
     }
 
-    // 👇 THÊM OPTION transports: ['websocket'] ĐỂ KẾT NỐI ỔN ĐỊNH HƠN TRÊN RENDER
     socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'], // Ưu tiên websocket
-      withCredentials: true // Nếu cần cookie (thường là không cần nếu set CORS *)
+      transports: ['websocket', 'polling'],
+      withCredentials: true
     })
 
-    console.log('🔌 Connecting to Socket at:', SOCKET_URL)
-
-    socketRef.current.on('connect', () => {
-      console.log('✅ Socket Connected! ID:', socketRef.current.id)
-    })
-
-    socketRef.current.on('connect_error', (err: any) => {
-      console.log('❌ Socket Error:', err.message)
-    })
-
+    // Lắng nghe Đơn hàng mới
     socketRef.current.on('new_order', (data: any) => {
-      console.log('Nhận thông báo đơn hàng:', data)
+      // Vì Backend đã lưu DB rồi, ở đây ta chỉ cần update UI cho real-time
+      // Ta tạo object giống format DB trả về
       handleNewNotification({
-        id: Date.now().toString(),
+        _id: Date.now().toString(), // Tạm thời fake ID cho socket
         type: 'ORDER',
         title: 'Đơn hàng mới! 🤑',
         message: `Đơn #${data.orderCode} - ${data.totalPrice}`,
         link: `/orders?id=${data.orderId}`,
-        time: 'Vừa xong',
+        createdAt: new Date().toISOString(),
         isRead: false
       })
     })
 
+    // Lắng nghe Low Stock
     socketRef.current.on('low_stock', (data: any) => {
       handleNewNotification({
-        id: Date.now().toString(),
+        _id: Date.now().toString(),
         type: 'STOCK',
         title: 'Cảnh báo kho ⚠️',
         message: `Sản phẩm ${data.productName} sắp hết!`,
-        link: `/products/${data.productId}`,
-        time: 'Vừa xong',
+        link: `/products?id=${data.productId}`,
+        createdAt: new Date().toISOString(),
         isRead: false
       })
     })
@@ -101,15 +110,26 @@ export function NotificationDropdown() {
     }
   }, [handleNewNotification])
 
+  // Xử lý click
   const handleItemClick = (notif: Notification) => {
-    if (!notif.isRead) {
-      setUnreadCount((prev) => Math.max(0, prev - 1))
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
-      )
-    }
+    // Logic đánh dấu đã đọc (Optional: Gọi API put read)
+    setUnreadCount((prev) => Math.max(0, prev - 1))
+    setNotifications((prev) =>
+      prev.map((n) => (n._id === notif._id ? { ...n, isRead: true } : n))
+    )
+
     setIsOpen(false)
     router.push(notif.link)
+  }
+
+  // Hàm xóa/đọc hết
+  const handleClearAll = async () => {
+    setNotifications([])
+    setUnreadCount(0)
+    // Gọi API báo đã đọc hết nếu muốn
+    try {
+      await axiosClient.put('/notifications/read-all')
+    } catch (e) {}
   }
 
   const renderIcon = (type: string) => {
@@ -153,7 +173,7 @@ export function NotificationDropdown() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="max-h-[350px] overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">
               Không có thông báo nào
@@ -161,7 +181,7 @@ export function NotificationDropdown() {
           ) : (
             notifications.map((item) => (
               <DropdownMenuItem
-                key={item.id}
+                key={item._id} // Dùng _id từ MongoDB
                 onClick={() => handleItemClick(item)}
                 className={`cursor-pointer px-4 py-3 border-b border-slate-50 last:border-0 items-start gap-3 ${
                   item.isRead ? 'opacity-60 bg-white' : 'bg-blue-50/30'
@@ -176,7 +196,11 @@ export function NotificationDropdown() {
                       {item.title}
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      {item.time}
+                      {/* Format giờ đơn giản */}
+                      {new Date(item.createdAt).toLocaleTimeString('vi-VN', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
@@ -197,9 +221,9 @@ export function NotificationDropdown() {
               variant="link"
               size="sm"
               className="text-xs text-slate-500 h-auto p-0"
-              onClick={() => setNotifications([])}
+              onClick={handleClearAll}
             >
-              Xóa tất cả
+              Đánh dấu tất cả đã đọc
             </Button>
           </div>
         )}

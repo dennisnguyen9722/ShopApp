@@ -10,9 +10,13 @@ import {
   CheckCircle,
   XCircle,
   Plus,
-  History
+  History,
+  Edit,
+  ChevronLeft, // 👇 Import icon mũi tên
+  ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 // UI Components
 import { Input } from '@/components/ui/input'
@@ -49,17 +53,34 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
 
+  // 👇 1. STATE PHÂN TRANG
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalProducts, setTotalProducts] = useState(0)
+  const LIMIT = 10 // Số lượng mỗi trang
+
   // State nhập hàng
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
   const [importQuantity, setImportQuantity] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 1. FETCH DATA
-  const fetchProducts = async () => {
+  const router = useRouter()
+
+  // 👇 2. SỬA HÀM FETCH ĐỂ NHẬN TRANG
+  const fetchProducts = async (page = 1) => {
+    setLoading(true)
     try {
-      // Gọi API lấy tất cả sản phẩm (Backend nên hỗ trợ pagination nếu nhiều)
-      const { data } = await axiosClient.get('/products')
-      setProducts(data.products || data) // Tuỳ cấu trúc trả về của API
+      // Gọi API kèm tham số phân trang
+      const { data } = await axiosClient.get(
+        `/products?page=${page}&limit=${LIMIT}`
+      )
+
+      // Backend trả về: { products: [], totalPages: 5, totalProducts: 50, currentPage: 1 }
+      // (Lưu ý: Nếu backend chưa trả về cấu trúc này, bạn cần update backend như hướng dẫn trước đó)
+      setProducts(data.products || [])
+      setTotalPages(data.totalPages || 1)
+      setTotalProducts(data.totalProducts || 0)
+      setCurrentPage(data.currentPage || page)
     } catch (error) {
       toast.error('Lỗi tải danh sách sản phẩm')
     } finally {
@@ -67,11 +88,23 @@ export default function InventoryPage() {
     }
   }
 
+  // Gọi fetch khi component mount hoặc currentPage đổi
   useEffect(() => {
-    fetchProducts()
-  }, [])
+    fetchProducts(currentPage)
+  }, [currentPage])
 
-  // 2. XỬ LÝ NHẬP KHO
+  // Hàm tính tồn kho thực tế
+  const calculateRealStock = (product: any) => {
+    if (product.variants && product.variants.length > 0) {
+      return product.variants.reduce(
+        (sum: number, v: any) => sum + (v.stock || 0),
+        0
+      )
+    }
+    return product.stock || 0
+  }
+
+  // Xử lý nhập kho
   const handleRestock = async () => {
     const qty = parseInt(importQuantity)
     if (!selectedProduct || isNaN(qty) || qty <= 0) {
@@ -81,11 +114,9 @@ export default function InventoryPage() {
 
     setIsSubmitting(true)
     try {
-      // Tính tồn kho mới = Tồn cũ + Nhập thêm
-      const newStock = (selectedProduct.stock || 0) + qty
+      const currentStock = calculateRealStock(selectedProduct)
+      const newStock = currentStock + qty
 
-      // Gọi API update (Dùng PUT /products/:id)
-      // Lưu ý: Backend nên có API riêng cho nhập kho để lưu lịch sử, nhưng dùng tạm update cũng được
       await axiosClient.put(`/products/${selectedProduct._id}`, {
         stock: newStock
       })
@@ -94,7 +125,7 @@ export default function InventoryPage() {
         `Đã nhập thêm ${qty} sản phẩm cho "${selectedProduct.title}"`
       )
 
-      // Update UI ngay lập tức
+      // Update UI cục bộ
       setProducts((prev) =>
         prev.map((p) =>
           p._id === selectedProduct._id ? { ...p, stock: newStock } : p
@@ -110,7 +141,6 @@ export default function InventoryPage() {
     }
   }
 
-  // Helper: Xác định trạng thái kho
   const getStockStatus = (stock: number) => {
     if (stock === 0)
       return {
@@ -131,26 +161,30 @@ export default function InventoryPage() {
     }
   }
 
-  // Filter Logic
+  // Filter Logic (Lưu ý: Chỉ filter trên trang hiện tại)
   const filteredProducts = products.filter((product) => {
+    const realStock = calculateRealStock(product)
     const matchesSearch = product.title
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
 
     let matchesFilter = true
-    if (filterStatus === 'out_of_stock') matchesFilter = product.stock === 0
+    if (filterStatus === 'out_of_stock') matchesFilter = realStock === 0
     if (filterStatus === 'low_stock')
-      matchesFilter = product.stock > 0 && product.stock <= 5
-    if (filterStatus === 'in_stock') matchesFilter = product.stock > 5
+      matchesFilter = realStock > 0 && realStock <= 5
+    if (filterStatus === 'in_stock') matchesFilter = realStock > 5
 
     return matchesSearch && matchesFilter
   })
 
-  // Thống kê nhanh
+  // Stats (Tính trên trang hiện tại - Để chính xác cần API stats riêng từ backend)
   const stats = {
-    totalItems: products.reduce((acc, p) => acc + (p.stock || 0), 0),
-    lowStockCount: products.filter((p) => p.stock > 0 && p.stock <= 5).length,
-    outOfStockCount: products.filter((p) => p.stock === 0).length
+    totalItems: products.reduce((acc, p) => acc + calculateRealStock(p), 0),
+    lowStockCount: products.filter((p) => {
+      const s = calculateRealStock(p)
+      return s > 0 && s <= 5
+    }).length,
+    outOfStockCount: products.filter((p) => calculateRealStock(p) === 0).length
   }
 
   return (
@@ -161,22 +195,21 @@ export default function InventoryPage() {
             <Warehouse className="w-8 h-8 text-indigo-600" /> Quản Lý Kho Hàng
           </h2>
           <p className="text-gray-500 mt-1">
-            Theo dõi tồn kho và nhập hàng nhanh chóng
+            Theo dõi tồn kho (Trang {currentPage}/{totalPages})
           </p>
         </div>
 
-        {/* Nút hành động phụ (Ví dụ: Xem lịch sử nhập xuất - làm sau) */}
         <Button variant="outline" className="gap-2">
           <History className="w-4 h-4" /> Lịch sử nhập xuất
         </Button>
       </div>
 
-      {/* 1. THỐNG KÊ NHANH */}
+      {/* 1. THỐNG KÊ (Current Page) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="shadow-sm border-l-4 border-l-red-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
-              Hết hàng (Cần nhập ngay)
+              Hết hàng (Trang này)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -188,7 +221,7 @@ export default function InventoryPage() {
         <Card className="shadow-sm border-l-4 border-l-yellow-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
-              Sắp hết (Báo động)
+              Sắp hết (Trang này)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -200,12 +233,12 @@ export default function InventoryPage() {
         <Card className="shadow-sm border-l-4 border-l-blue-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
-              Tổng tồn kho
+              Tổng sản phẩm
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {stats.totalItems} đơn vị
+              {totalProducts} (Toàn hệ thống)
             </div>
           </CardContent>
         </Card>
@@ -217,7 +250,7 @@ export default function InventoryPage() {
           <div className="relative w-full md:w-96">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
             <Input
-              placeholder="Tìm kiếm theo tên sản phẩm..."
+              placeholder="Tìm kiếm..."
               className="pl-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -250,7 +283,6 @@ export default function InventoryPage() {
                   <TableHead className="w-[80px]">Ảnh</TableHead>
                   <TableHead>Tên sản phẩm</TableHead>
                   <TableHead className="text-center">Danh mục</TableHead>
-                  <TableHead className="text-center">Giá bán</TableHead>
                   <TableHead className="text-center">Tồn kho</TableHead>
                   <TableHead className="text-center">Trạng thái</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
@@ -259,14 +291,17 @@ export default function InventoryPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
-                      Đang tải...
+                    <TableCell colSpan={6} className="h-24 text-center">
+                      <div className="flex justify-center items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        Đang tải...
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : filteredProducts.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={6}
                       className="h-24 text-center text-gray-500"
                     >
                       Không tìm thấy sản phẩm nào
@@ -274,8 +309,11 @@ export default function InventoryPage() {
                   </TableRow>
                 ) : (
                   filteredProducts.map((product) => {
-                    const status = getStockStatus(product.stock)
+                    const realStock = calculateRealStock(product)
+                    const status = getStockStatus(realStock)
                     const StatusIcon = status.icon
+                    const hasVariants =
+                      product.variants && product.variants.length > 0
 
                     return (
                       <TableRow
@@ -291,29 +329,34 @@ export default function InventoryPage() {
                             />
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium">
-                          {product.title}
+                        <TableCell>
+                          <div className="font-medium">{product.title}</div>
+                          {hasVariants && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] mt-1 font-normal bg-slate-50"
+                            >
+                              {product.variants.length} Phiên bản
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-center text-gray-500 text-sm">
                           {typeof product.category === 'object'
                             ? product.category?.name
                             : '---'}
                         </TableCell>
-                        <TableCell className="text-center font-medium">
-                          {new Intl.NumberFormat('vi-VN').format(product.price)}
-                          ₫
-                        </TableCell>
+
                         <TableCell className="text-center">
                           <span
                             className={`font-bold text-lg ${
-                              product.stock === 0
+                              realStock === 0
                                 ? 'text-red-600'
-                                : product.stock <= 5
+                                : realStock <= 5
                                 ? 'text-yellow-600'
                                 : 'text-gray-700'
                             }`}
                           >
-                            {product.stock}
+                            {realStock}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
@@ -324,14 +367,25 @@ export default function InventoryPage() {
                             <StatusIcon className="w-3 h-3" /> {status.label}
                           </Badge>
                         </TableCell>
+
                         <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            className="bg-indigo-600 hover:bg-indigo-700"
-                            onClick={() => setSelectedProduct(product)}
-                          >
-                            <Plus className="w-4 h-4 mr-1" /> Nhập hàng
-                          </Button>
+                          {hasVariants ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => router.push('/products')}
+                            >
+                              <Edit className="w-4 h-4 mr-1" /> Chi tiết
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="bg-indigo-600 hover:bg-indigo-700"
+                              onClick={() => setSelectedProduct(product)}
+                            >
+                              <Plus className="w-4 h-4 mr-1" /> Nhập hàng
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -340,10 +394,39 @@ export default function InventoryPage() {
               </TableBody>
             </Table>
           </div>
+
+          {/* 👇 3. FOOTER PHÂN TRANG */}
+          <div className="flex items-center justify-between px-4 py-4 border-t bg-gray-50/50">
+            <div className="text-sm text-gray-500">
+              Hiển thị trang{' '}
+              <span className="font-bold text-gray-900">{currentPage}</span> /{' '}
+              {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1 || loading}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Trước
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                }
+                disabled={currentPage === totalPages || loading}
+              >
+                Sau <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* --- MODAL NHẬP HÀNG --- */}
+      {/* --- MODAL NHẬP HÀNG (Giữ nguyên) --- */}
       <Dialog
         open={!!selectedProduct}
         onOpenChange={(open) => !open && setSelectedProduct(null)}
@@ -371,7 +454,7 @@ export default function InventoryPage() {
                   <p className="text-xs text-gray-500">
                     Tồn hiện tại:{' '}
                     <span className="font-bold text-indigo-600">
-                      {selectedProduct.stock}
+                      {calculateRealStock(selectedProduct)}
                     </span>
                   </p>
                 </div>
@@ -388,19 +471,18 @@ export default function InventoryPage() {
                   id="qty"
                   type="number"
                   className="col-span-3"
-                  placeholder="Nhập số lượng muốn thêm..."
+                  placeholder="Nhập số lượng..."
                   autoFocus
                   value={importQuantity}
                   onChange={(e) => setImportQuantity(e.target.value)}
                 />
               </div>
 
-              {/* Tính toán trước */}
               {importQuantity && !isNaN(parseInt(importQuantity)) && (
                 <div className="text-center text-sm text-gray-500 mt-2">
                   Sau khi nhập:{' '}
                   <span className="font-bold text-gray-900">
-                    {selectedProduct.stock}
+                    {calculateRealStock(selectedProduct)}
                   </span>{' '}
                   +{' '}
                   <span className="font-bold text-green-600">
@@ -408,7 +490,8 @@ export default function InventoryPage() {
                   </span>{' '}
                   ={' '}
                   <span className="font-bold text-indigo-600 text-lg">
-                    {(selectedProduct.stock || 0) + parseInt(importQuantity)}
+                    {calculateRealStock(selectedProduct) +
+                      parseInt(importQuantity)}
                   </span>
                 </div>
               )}

@@ -2,10 +2,11 @@ const express = require('express')
 const router = express.Router()
 const Order = require('../models/Order')
 const Product = require('../models/Product')
+const Notification = require('../models/Notification') // 👈 Model Thông báo
 const { protect, checkPermission } = require('../middleware/authMiddleware')
 const PERMISSIONS = require('../config/permissions')
 
-// 1. TẠO ĐƠN HÀNG (PUBLIC) + TRỪ KHO + BẮN NOTI
+// 1. TẠO ĐƠN HÀNG (PUBLIC) + TRỪ KHO + BẮN NOTI + LƯU NOTI
 router.post('/', async (req, res) => {
   try {
     const {
@@ -25,7 +26,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Thiếu thông tin giao hàng' })
     }
 
-    // --- 🔥 LOGIC MỚI: KIỂM TRA TỒN KHO TRƯỚC KHI BÁN ---
+    // --- KIỂM TRA TỒN KHO TRƯỚC KHI BÁN ---
     for (const item of items) {
       const product = await Product.findById(item.product)
       if (!product) {
@@ -33,6 +34,8 @@ router.post('/', async (req, res) => {
           .status(404)
           .json({ message: `Sản phẩm ID ${item.product} không tồn tại` })
       }
+      // Kiểm tra biến thể nếu có (logic đơn giản check stock tổng)
+      // Nếu bạn muốn check stock biến thể cụ thể thì cần logic phức tạp hơn ở đây
       if (product.stock < item.quantity) {
         return res.status(400).json({
           message: `Sản phẩm "${product.title}" chỉ còn ${product.stock}, không đủ giao.`
@@ -40,7 +43,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // --- Tạo đơn hàng ---
+    // --- TẠO ĐƠN HÀNG ---
     const orderData = {
       customer,
       items,
@@ -51,31 +54,71 @@ router.post('/', async (req, res) => {
     }
     const createdOrder = await Order.create(orderData)
 
-    // --- 🔥 LOGIC MỚI: TRỪ KHO & CẢNH BÁO ---
+    // ============================================================
+    // 🔥 1. LƯU THÔNG BÁO "ĐƠN HÀNG MỚI" VÀO DB
+    // ============================================================
+    try {
+      await Notification.create({
+        type: 'ORDER',
+        title: 'Đơn hàng mới! 🤑',
+        message: `Đơn #${createdOrder._id
+          .toString()
+          .slice(-6)
+          .toUpperCase()} - ${new Intl.NumberFormat('vi-VN', {
+          style: 'currency',
+          currency: 'VND'
+        }).format(createdOrder.totalAmount)}`,
+        link: `/orders?id=${createdOrder._id}`, // Link chuẩn query param
+        isRead: false
+      })
+    } catch (notiError) {
+      console.error('Lỗi lưu notification đơn hàng:', notiError)
+      // Không return lỗi để quy trình đặt hàng vẫn thành công
+    }
+
+    // --- XỬ LÝ TRỪ KHO & CẢNH BÁO ---
     const io = req.app.get('io') // Lấy Socket IO
 
     for (const item of items) {
-      // 1. Trừ số lượng tồn kho
+      // Trừ số lượng tồn kho
       const product = await Product.findById(item.product)
       product.stock -= item.quantity
       product.sold = (product.sold || 0) + item.quantity // Tăng số lượng đã bán
       await product.save()
 
-      // 2. Kiểm tra nếu sắp hết hàng (Ví dụ: dưới 5 cái)
-      if (product.stock <= 5 && io) {
-        io.emit('low_stock', {
-          productId: product._id,
-          productName: product.title,
-          stock: product.stock,
-          image: product.image
-        })
+      // Kiểm tra nếu sắp hết hàng (Ví dụ: dưới 5 cái)
+      if (product.stock <= 5) {
+        // ============================================================
+        // 🔥 2. LƯU THÔNG BÁO "SẮP HẾT HÀNG" VÀO DB
+        // ============================================================
+        try {
+          await Notification.create({
+            type: 'STOCK',
+            title: 'Cảnh báo kho ⚠️',
+            message: `Sản phẩm "${product.title}" sắp hết (còn ${product.stock})!`,
+            link: `/products?id=${product._id}`,
+            isRead: false
+          })
+        } catch (notiError) {
+          console.error('Lỗi lưu notification stock:', notiError)
+        }
+
+        // Bắn Socket Low Stock (Real-time)
+        if (io) {
+          io.emit('low_stock', {
+            productId: product._id,
+            productName: product.title,
+            stock: product.stock,
+            image: product.image
+          })
+        }
         console.log(
           `⚠️ Cảnh báo: ${product.title} sắp hết hàng (${product.stock})`
         )
       }
     }
 
-    // --- Bắn thông báo Đơn hàng mới ---
+    // --- BẮN SOCKET ĐƠN HÀNG MỚI (Real-time) ---
     if (io) {
       io.emit('new_order', {
         orderId: createdOrder._id,
