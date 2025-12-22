@@ -38,26 +38,20 @@ router.post('/', async (req, res) => {
             v.color === item.variant.color && v.storage === item.variant.storage
         )
         if (!variant)
-          return res
-            .status(400)
-            .json({
-              message: `Phiên bản "${item.variant.color} ${item.variant.storage}" của "${product.title}" không tồn tại.`
-            })
+          return res.status(400).json({
+            message: `Phiên bản "${item.variant.color} ${item.variant.storage}" của "${product.title}" không tồn tại.`
+          })
         if (variant.stock < item.quantity)
-          return res
-            .status(400)
-            .json({
-              message: `Phiên bản "${product.title} - ${variant.color} ${variant.storage}" chỉ còn ${variant.stock}, không đủ giao.`
-            })
+          return res.status(400).json({
+            message: `Phiên bản "${product.title} - ${variant.color} ${variant.storage}" chỉ còn ${variant.stock}, không đủ giao.`
+          })
       }
       // Check kho thường
       else {
         if (product.stock < item.quantity)
-          return res
-            .status(400)
-            .json({
-              message: `Sản phẩm "${product.title}" chỉ còn ${product.stock}, không đủ giao.`
-            })
+          return res.status(400).json({
+            message: `Sản phẩm "${product.title}" chỉ còn ${product.stock}, không đủ giao.`
+          })
       }
     }
 
@@ -211,7 +205,7 @@ router.put(
       if (!order)
         return res.status(404).json({ message: 'Không tìm thấy đơn hàng' })
 
-      // --- LOGIC HOÀN KHO KHI HỦY ---
+      // 1. LOGIC HOÀN KHO (Giữ nguyên logic cũ của bạn)
       if (status === 'cancelled' && order.status !== 'cancelled') {
         for (const item of order.items) {
           const product = await Product.findById(item.product)
@@ -238,29 +232,29 @@ router.put(
         }
       }
 
-      // Cập nhật trạng thái
+      // 2. CẬP NHẬT & LƯU DB
       order.status = status
       await order.save()
 
-      // ============================================================
-      // 🔥 GỬI EMAIL CHỈ KHI "COMPLETED" (CHẠY NGẦM)
-      // ============================================================
-      if (status === 'completed' && order.customer && order.customer.email) {
-        console.log(`📧 Đơn hàng ${order._id} hoàn thành. Đang gửi mail...`)
+      // 🔥 QUAN TRỌNG: TRẢ LỜI APP NGAY LẬP TỨC (Để UI không bị lag/nhảy)
+      res.json(order)
 
+      // 3. GỬI MAIL (CHẠY NGẦM - SAU KHI ĐÃ RES.JSON)
+      // Chỉ gửi khi trạng thái là completed VÀ có email khách
+      if (status === 'completed' && order.customer && order.customer.email) {
+        // Không dùng 'await' ở đây để server không bị block
         sendEmail({
           email: order.customer.email,
-          subject: `SuperMall - Cảm ơn bạn đã mua hàng! (#${order._id
+          subject: `SuperMall - Đơn hàng #${order._id
             .toString()
             .slice(-6)
-            .toUpperCase()})`,
+            .toUpperCase()} hoàn thành`,
           order: order
-        }).catch((err) => console.error('❌ Lỗi gửi mail:', err.message))
+        })
       }
-
-      res.json(order)
     } catch (err) {
-      res.status(500).json({ message: err.message })
+      // Nếu lỗi xảy ra trước khi res.json thì mới báo lỗi 500
+      if (!res.headersSent) res.status(500).json({ message: err.message })
     }
   }
 )
