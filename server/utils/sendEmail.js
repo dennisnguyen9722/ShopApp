@@ -18,6 +18,10 @@ async function sendEmail({ email, subject, order }) {
   try {
     const orderCode = order._id.toString().slice(-6).toUpperCase()
 
+    // LOG ĐỂ KIỂM TRA DỮ LIỆU
+    console.log('📦 Order data:', JSON.stringify(order, null, 2))
+    console.log('📦 Items:', JSON.stringify(order.items, null, 2))
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height:1.6; color:#333;">
         <h2 style="color:#2563eb;">Cảm ơn bạn đã mua hàng tại <strong>SuperMall</strong>!</h2>
@@ -27,10 +31,19 @@ async function sendEmail({ email, subject, order }) {
         <h3>Chi tiết đơn hàng</h3>
         <ul>
           ${order.items
-            .map(
-              (item) => `
+            .map((item) => {
+              // Debug từng item
+              console.log('🔍 Item:', item)
+
+              return `
               <li>
-                ${item.title || item.product?.title || 'Sản phẩm'} 
+                ${
+                  item.title ||
+                  item.product?.title ||
+                  item.name ||
+                  item.productName ||
+                  'Sản phẩm'
+                } 
                 ${
                   item.variant
                     ? `(${item.variant.color || ''} ${
@@ -44,7 +57,7 @@ async function sendEmail({ email, subject, order }) {
                   currency: 'VND'
                 }).format(item.price)}
               </li>`
-            )
+            })
             .join('')}
         </ul>
         <p><strong>Tổng thanh toán:</strong> ${new Intl.NumberFormat('vi-VN', {
@@ -61,7 +74,6 @@ async function sendEmail({ email, subject, order }) {
       </div>
     `
 
-    // Dùng plain object thay vì SendSmtpEmail class
     const emailData = {
       sender: { name: 'SuperMall', email: process.env.BREVO_USER },
       to: [{ email: email }],
@@ -69,24 +81,10 @@ async function sendEmail({ email, subject, order }) {
       htmlContent: htmlContent
     }
 
-    console.log(
-      '📧 Đang gửi email với data:',
-      JSON.stringify(emailData, null, 2)
-    )
-
     await apiInstance.sendTransacEmail(emailData)
     console.log(`✅ Email xác nhận đã gửi đến: ${email}`)
   } catch (error) {
-    console.error('❌ Lỗi gửi email Brevo:')
-    console.error('Status:', error.response?.status)
-    console.error('Body:', error.response?.body)
-    console.error('Text:', error.response?.text)
-    console.error('Message:', error.message)
-
-    // Log thêm để debug
-    if (error.response?.data) {
-      console.error('Response data:', error.response.data)
-    }
+    console.error('❌ Lỗi gửi email Brevo:', error.message)
   }
 }
 

@@ -5,6 +5,9 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Bell, Package, AlertTriangle, Star } from 'lucide-react'
 import { io } from 'socket.io-client'
 import { useRouter } from 'next/navigation'
+// 👇 1. IMPORT TOAST
+import { toast } from 'sonner'
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,14 +18,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import axiosClient from '@/lib/axiosClient' // 👇 NHỚ IMPORT AXIOS
+import axiosClient from '@/lib/axiosClient'
 
-// URL Socket
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'
 const SOCKET_URL = API_URL.replace('/api', '')
 
 interface Notification {
-  _id: string // MongoDB dùng _id
+  _id: string
   type: 'ORDER' | 'STOCK' | 'REVIEW'
   title: string
   message: string
@@ -40,13 +42,11 @@ export function NotificationDropdown() {
   const socketRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // 1. FETCH LỊCH SỬ THÔNG BÁO (Lúc F5 trang)
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
         const { data } = await axiosClient.get('/notifications')
         setNotifications(data)
-        // Đếm số chưa đọc (nếu muốn) hoặc hiển thị chấm đỏ nếu có tin mới
         setUnreadCount(data.filter((n: any) => !n.isRead).length)
       } catch (error) {
         console.log('Lỗi lấy thông báo:', error)
@@ -55,21 +55,52 @@ export function NotificationDropdown() {
     fetchNotifications()
   }, [])
 
-  // 2. HÀM XỬ LÝ KHI CÓ SOCKET MỚI
-  const handleNewNotification = useCallback((notif: Notification) => {
-    try {
-      audioRef.current?.play().catch(() => {})
-    } catch (e) {}
+  const handleNewNotification = useCallback(
+    (notif: Notification) => {
+      // Phát âm thanh
+      try {
+        audioRef.current?.play().catch(() => {})
+      } catch (e) {}
 
-    // Chèn vào đầu danh sách
-    setNotifications((prev) => [notif, ...prev])
-    setUnreadCount((prev) => prev + 1)
-  }, [])
+      // Cập nhật danh sách chuông
+      setNotifications((prev) => [notif, ...prev])
+      setUnreadCount((prev) => prev + 1)
+
+      // 👇 2. HIỆN TOAST (PHẦN BẠN CẦN)
+      // Tùy vào loại thông báo mà hiện màu khác nhau
+      if (notif.type === 'ORDER') {
+        toast.success(notif.title, {
+          description: notif.message,
+          duration: 5000,
+          action: {
+            label: 'Xem ngay',
+            onClick: () => router.push(notif.link) // Bấm vào toast là chuyển trang luôn
+          },
+          style: {
+            border: '1px solid #10B981',
+            color: '#064E3B',
+            background: '#ECFDF5'
+          } // Màu xanh lá
+        })
+      } else if (notif.type === 'STOCK') {
+        toast.error(notif.title, {
+          description: notif.message,
+          action: {
+            label: 'Kiểm tra',
+            onClick: () => router.push(notif.link)
+          }
+        })
+      } else {
+        toast.info(notif.title, { description: notif.message })
+      }
+    },
+    [router]
+  ) // Nhớ thêm router vào dependency
 
   // 3. KẾT NỐI SOCKET
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      audioRef.current = new Audio('/sounds/notification.mp3')
+      audioRef.current = new Audio('/sounds/notification.mp3') // Đảm bảo đường dẫn đúng
     }
 
     socketRef.current = io(SOCKET_URL, {
@@ -79,14 +110,12 @@ export function NotificationDropdown() {
 
     // Lắng nghe Đơn hàng mới
     socketRef.current.on('new_order', (data: any) => {
-      // Vì Backend đã lưu DB rồi, ở đây ta chỉ cần update UI cho real-time
-      // Ta tạo object giống format DB trả về
       handleNewNotification({
-        _id: Date.now().toString(), // Tạm thời fake ID cho socket
+        _id: Date.now().toString(),
         type: 'ORDER',
         title: 'Đơn hàng mới! 🤑',
-        message: `Đơn #${data.orderCode} - ${data.totalPrice}`,
-        link: `/orders?id=${data.orderId}`,
+        message: `Đơn #${data.orderCode} - ${data.customerName}\nTổng tiền: ${data.totalPrice}`,
+        link: `/admin/orders?id=${data.orderId}`, // Đảm bảo link đúng admin
         createdAt: new Date().toISOString(),
         isRead: false
       })
@@ -98,8 +127,8 @@ export function NotificationDropdown() {
         _id: Date.now().toString(),
         type: 'STOCK',
         title: 'Cảnh báo kho ⚠️',
-        message: `Sản phẩm ${data.productName} sắp hết!`,
-        link: `/products?id=${data.productId}`,
+        message: `Sản phẩm ${data.productName} sắp hết (còn ${data.stock})!`,
+        link: `/admin/products?id=${data.productId}`,
         createdAt: new Date().toISOString(),
         isRead: false
       })
@@ -110,23 +139,21 @@ export function NotificationDropdown() {
     }
   }, [handleNewNotification])
 
-  // Xử lý click
+  // ... (Phần UI Dropdown bên dưới GIỮ NGUYÊN không cần sửa) ...
+
+  // Logic đánh dấu đã đọc
   const handleItemClick = (notif: Notification) => {
-    // Logic đánh dấu đã đọc (Optional: Gọi API put read)
     setUnreadCount((prev) => Math.max(0, prev - 1))
     setNotifications((prev) =>
       prev.map((n) => (n._id === notif._id ? { ...n, isRead: true } : n))
     )
-
     setIsOpen(false)
     router.push(notif.link)
   }
 
-  // Hàm xóa/đọc hết
   const handleClearAll = async () => {
     setNotifications([])
     setUnreadCount(0)
-    // Gọi API báo đã đọc hết nếu muốn
     try {
       await axiosClient.put('/notifications/read-all')
     } catch (e) {}
@@ -181,7 +208,7 @@ export function NotificationDropdown() {
           ) : (
             notifications.map((item) => (
               <DropdownMenuItem
-                key={item._id} // Dùng _id từ MongoDB
+                key={item._id}
                 onClick={() => handleItemClick(item)}
                 className={`cursor-pointer px-4 py-3 border-b border-slate-50 last:border-0 items-start gap-3 ${
                   item.isRead ? 'opacity-60 bg-white' : 'bg-blue-50/30'
@@ -196,7 +223,6 @@ export function NotificationDropdown() {
                       {item.title}
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      {/* Format giờ đơn giản */}
                       {new Date(item.createdAt).toLocaleTimeString('vi-VN', {
                         hour: '2-digit',
                         minute: '2-digit'
