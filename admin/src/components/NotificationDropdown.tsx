@@ -115,7 +115,7 @@ export function NotificationDropdown() {
         type: 'ORDER',
         title: 'Đơn hàng mới! 🤑',
         message: `Đơn #${data.orderCode} - ${data.customerName}\nTổng tiền: ${data.totalPrice}`,
-        link: `/admin/orders?id=${data.orderId}`, // Đảm bảo link đúng admin
+        link: `/orders?id=${data.orderId}`, // Đảm bảo link đúng admin
         createdAt: new Date().toISOString(),
         isRead: false
       })
@@ -128,7 +128,7 @@ export function NotificationDropdown() {
         type: 'STOCK',
         title: 'Cảnh báo kho ⚠️',
         message: `Sản phẩm ${data.productName} sắp hết (còn ${data.stock})!`,
-        link: `/admin/products?id=${data.productId}`,
+        link: `/products?id=${data.productId}`,
         createdAt: new Date().toISOString(),
         isRead: false
       })

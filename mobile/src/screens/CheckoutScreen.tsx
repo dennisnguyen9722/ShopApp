@@ -8,7 +8,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
   Modal,
   FlatList
 } from 'react-native'
@@ -17,6 +16,7 @@ import { CartService } from '../services/CartService'
 import { orderApi } from '../api/orderApi'
 import { formatCurrency } from '../utils/formatCurrency'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 // API Hành chính Việt Nam (Miễn phí)
 const API_HOST = 'https://esgoo.net/api-tinhthanh'

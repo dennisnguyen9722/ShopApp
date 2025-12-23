@@ -9,22 +9,16 @@ import {
   Trash2,
   Package,
   Loader2,
-  Image as ImageIcon,
-  ChevronLeft,
-  ChevronRight
+  Search,
+  Filter,
+  ChevronDown,
+  Grid3x3,
+  List
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
 import { toast } from 'sonner'
 import { ProductForm, ProductFormData } from '@/components/ProductForm'
 
@@ -33,15 +27,22 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<any[]>([])
   const [brands, setBrands] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
 
   // Modal
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any | null>(null)
+
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
 
   // 1. FETCH METADATA
   useEffect(() => {
@@ -60,11 +61,15 @@ export default function ProductsPage() {
     fetchMetadata()
   }, [])
 
-  // 2. FETCH PRODUCTS
+  // 2. FETCH PRODUCTS - GIỮ NGUYÊN LOGIC CỦA BẠN
   const fetchProducts = async (page: number) => {
     setLoading(true)
     try {
-      const { data } = await axiosClient.get(`/products?page=${page}&limit=10`)
+      let url = `/products?page=${page}&limit=${itemsPerPage}`
+      if (selectedCategory) url += `&category=${selectedCategory}`
+      if (searchTerm) url += `&search=${searchTerm}`
+
+      const { data } = await axiosClient.get(url)
       setProducts(data.products || [])
       setTotalPages(data.totalPages || 1)
       setTotalProducts(data.total || 0)
@@ -78,9 +83,9 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchProducts(currentPage)
-  }, [currentPage])
+  }, [currentPage, itemsPerPage, selectedCategory, searchTerm])
 
-  // 👇 HÀM TÍNH TỔNG TỒN KHO (Helper)
+  // Helper
   const calculateTotalStock = (p: any) => {
     if (p.variants && p.variants.length > 0) {
       return p.variants.reduce((acc: number, v: any) => acc + (v.stock || 0), 0)
@@ -88,7 +93,7 @@ export default function ProductsPage() {
     return p.stock || 0
   }
 
-  // Handlers
+  // Handlers - GIỮ NGUYÊN
   const handleAddNew = () => {
     setEditingProduct(null)
     setIsDialogOpen(true)
@@ -133,216 +138,459 @@ export default function ProductsPage() {
       currency: 'VND'
     }).format(amount)
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const getStockColor = (stock: number) => {
+    if (stock === 0) return 'text-red-500 bg-red-50'
+    if (stock <= 5) return 'text-amber-600 bg-amber-50'
+    return 'text-emerald-600 bg-emerald-50'
+  }
+
+  const getStockLabel = (stock: number) => {
+    if (stock === 0) return 'Hết hàng'
+    if (stock <= 5) return 'Sắp hết'
+    return 'Còn hàng'
+  }
+
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto p-4 sm:p-6">
-      {/* Header Section */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-            Quản Lý Sản Phẩm
-            <Badge
-              variant="secondary"
-              className="text-sm font-normal px-2 py-0.5 bg-indigo-50 text-indigo-700"
-            >
-              {totalProducts}
-            </Badge>
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Quản lý kho hàng, giá cả và biến thể sản phẩm.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={handleAddNew}
-            className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-all"
-          >
-            <Plus className="mr-2 h-4 w-4" /> Thêm Sản Phẩm
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen">
+      <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="bg-white rounded-2xl shadow-xl shadow-indigo-100/50 p-6 sm:p-8 border border-indigo-100/20">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <Package className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                      Quản Lý Sản Phẩm
+                    </h1>
+                    <p className="text-slate-500 text-sm mt-1">
+                      {totalProducts} sản phẩm
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-      <Card className="shadow-sm border-slate-200 bg-white overflow-hidden">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/75">
-                <TableRow>
-                  <TableHead className="w-[80px] py-4 pl-6">Ảnh</TableHead>
-                  <TableHead className="py-4 font-semibold text-slate-700">
-                    Tên Thiết Bị
-                  </TableHead>
-                  <TableHead className="py-4 font-semibold text-slate-700">
-                    Giá (Từ)
-                  </TableHead>
-                  <TableHead className="text-center py-4 font-semibold text-slate-700">
-                    Danh mục
-                  </TableHead>
-                  {/* 👇 ĐÃ THÊM CỘT TỒN KHO */}
-                  <TableHead className="text-center py-4 font-semibold text-slate-700">
-                    Tồn kho
-                  </TableHead>
-                  <TableHead className="text-center py-4 font-semibold text-slate-700">
-                    Thương hiệu
-                  </TableHead>
-                  <TableHead className="text-right py-4 pr-6 font-semibold text-slate-700">
-                    Thao tác
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={7} className="h-20 text-center">
-                        <Loader2 className="mx-auto animate-spin text-slate-300" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : products.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="h-64 text-center text-slate-500"
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
-                          <Package className="h-8 w-8 text-slate-400" />
-                        </div>
-                        <p className="font-medium">Chưa có sản phẩm nào</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  products.map((p) => {
-                    // Tính tồn kho
-                    const totalStock = calculateTotalStock(p)
-
-                    return (
-                      <TableRow
-                        key={p._id}
-                        className="hover:bg-slate-50/60 transition-colors group"
-                      >
-                        <TableCell className="pl-6 py-3">
-                          <div className="w-14 h-14 rounded-lg border bg-white flex items-center justify-center overflow-hidden shadow-sm">
-                            {p.image ? (
-                              <img
-                                src={p.image}
-                                className="w-full h-full object-contain p-1"
-                                alt=""
-                              />
-                            ) : (
-                              <ImageIcon className="w-6 h-6 text-slate-300" />
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium text-slate-900 py-3">
-                          <div
-                            className="line-clamp-2 max-w-[300px]"
-                            title={p.title}
-                          >
-                            {p.title}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-indigo-600 font-bold py-3">
-                          {formatCurrency(p.price)}
-                        </TableCell>
-                        <TableCell className="text-center py-3">
-                          <Badge
-                            variant="secondary"
-                            className="capitalize bg-slate-100 text-slate-600 hover:bg-slate-200"
-                          >
-                            {p.category}
-                          </Badge>
-                        </TableCell>
-
-                        {/* 👇 HIỂN THỊ TỒN KHO */}
-                        <TableCell className="text-center py-3">
-                          <span
-                            className={`font-bold ${
-                              totalStock === 0
-                                ? 'text-red-500'
-                                : totalStock <= 5
-                                ? 'text-yellow-600'
-                                : 'text-slate-700'
-                            }`}
-                          >
-                            {totalStock}
-                          </span>
-                          {p.variants?.length > 0 && (
-                            <span className="block text-[10px] text-slate-400">
-                              ({p.variants.length} phiên bản)
-                            </span>
-                          )}
-                        </TableCell>
-
-                        <TableCell className="text-center py-3">
-                          <span className="text-sm font-medium text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 shadow-sm inline-block min-w-[60px]">
-                            {typeof p.brand === 'object'
-                              ? p.brand?.name
-                              : 'N/A'}
-                          </span>
-                        </TableCell>
-
-                        <TableCell className="text-right pr-6 py-3">
-                          <div className="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(p)}
-                              className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(p._id)}
-                              className="h-8 w-8 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Footer Pagination */}
-          <div className="border-t bg-slate-50/50 p-4 flex items-center justify-end gap-6">
-            <span className="text-sm text-slate-500 font-medium">
-              Trang{' '}
-              <span className="text-slate-900 font-bold">{currentPage}</span>{' '}
-              trên {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1 || loading}
-                className="h-8 w-8 p-0"
+                onClick={handleAddNew}
+                className="px-6 py-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all hover:scale-105"
               >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                }
-                disabled={currentPage === totalPages || loading}
-                className="h-8 w-8 p-0"
-              >
-                <ChevronRight className="h-4 w-4" />
+                <Plus className="mr-2 h-5 w-5" />
+                Thêm Sản Phẩm
               </Button>
             </div>
+
+            {/* Search and Filters */}
+            <div className="mt-6 flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm sản phẩm..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-slate-200 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all outline-none"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-4 py-3 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all flex items-center gap-2 font-medium"
+                >
+                  <Filter className="w-5 h-5" />
+                  Lọc
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      showFilters ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                <div className="flex rounded-xl border-2 border-slate-200 overflow-hidden">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`px-4 py-3 transition-all ${
+                      viewMode === 'list'
+                        ? 'bg-indigo-600 text-white'
+                        : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <List className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`px-4 py-3 transition-all ${
+                      viewMode === 'grid'
+                        ? 'bg-indigo-600 text-white'
+                        : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <Grid3x3 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Panel */}
+            {showFilters && (
+              <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSelectedCategory('')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      selectedCategory === ''
+                        ? 'bg-indigo-600 text-white shadow-lg'
+                        : 'bg-white border border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    Tất cả
+                  </button>
+                  {categories.map((cat: any) => (
+                    <button
+                      key={cat._id}
+                      onClick={() => setSelectedCategory(cat.slug || cat.name)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        selectedCategory === (cat.slug || cat.name)
+                          ? 'bg-indigo-600 text-white shadow-lg'
+                          : 'bg-white border border-slate-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Products Display */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64 bg-white rounded-2xl shadow-xl">
+            <Loader2 className="w-12 h-12 animate-spin text-indigo-600" />
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {products.map((p) => {
+              const totalStock = calculateTotalStock(p)
+              return (
+                <Card
+                  key={p._id}
+                  className="overflow-hidden group hover:shadow-2xl transition-all duration-300 hover:scale-105 border-indigo-100"
+                >
+                  <div className="relative h-48 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                    {p.image ? (
+                      <img
+                        src={p.image}
+                        alt={p.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <Package className="w-16 h-16 text-slate-300" />
+                      </div>
+                    )}
+                    <div
+                      className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-bold ${getStockColor(
+                        totalStock
+                      )}`}
+                    >
+                      {getStockLabel(totalStock)}
+                    </div>
+                  </div>
+
+                  <CardContent className="p-4">
+                    <Badge
+                      variant="secondary"
+                      className="mb-2 bg-indigo-50 text-indigo-700"
+                    >
+                      {typeof p.brand === 'object' ? p.brand?.name : 'N/A'}
+                    </Badge>
+                    <h3 className="font-bold text-slate-900 mb-2 line-clamp-2 min-h-[3rem]">
+                      {p.title}
+                    </h3>
+                    <div className="flex items-baseline gap-2 mb-4">
+                      <span className="text-2xl font-bold text-indigo-600">
+                        {formatCurrency(p.price)}
+                      </span>
+                      {p.originalPrice && p.originalPrice > p.price && (
+                        <span className="text-sm text-slate-400 line-through">
+                          {formatCurrency(p.originalPrice)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleEdit(p)}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Sửa
+                      </Button>
+                      <Button
+                        onClick={() => handleDelete(p._id)}
+                        variant="destructive"
+                        size="icon"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        ) : (
+          <Card className="shadow-xl border-indigo-100/20 overflow-hidden p-0">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gradient-to-r from-indigo-50 to-purple-50">
+                    <tr>
+                      <th className="text-left p-4 font-bold text-slate-700">
+                        Ảnh
+                      </th>
+                      <th className="text-left p-4 font-bold text-slate-700">
+                        Sản phẩm
+                      </th>
+                      <th className="text-left p-4 font-bold text-slate-700">
+                        Giá
+                      </th>
+                      <th className="text-center p-4 font-bold text-slate-700">
+                        Danh mục
+                      </th>
+                      <th className="text-center p-4 font-bold text-slate-700">
+                        Tồn kho
+                      </th>
+                      <th className="text-center p-4 font-bold text-slate-700">
+                        Thương hiệu
+                      </th>
+                      <th className="text-right p-4 font-bold text-slate-700">
+                        Thao tác
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="h-64 text-center text-slate-500"
+                        >
+                          <div className="flex flex-col items-center gap-3">
+                            <Package className="w-16 h-16 text-slate-300" />
+                            <p className="font-medium">Chưa có sản phẩm nào</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      products.map((p) => {
+                        const totalStock = calculateTotalStock(p)
+                        return (
+                          <tr
+                            key={p._id}
+                            className="border-t border-slate-100 hover:bg-indigo-50/30 transition-colors"
+                          >
+                            <td className="p-4">
+                              <div className="w-16 h-16 rounded-xl overflow-hidden shadow-md bg-gradient-to-br from-slate-100 to-slate-200">
+                                {p.image ? (
+                                  <img
+                                    src={p.image}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex items-center justify-center h-full">
+                                    <Package className="w-8 h-8 text-slate-300" />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 font-bold text-slate-900 line-clamp-2 max-w-md">
+                              {p.title}
+                            </td>
+                            <td className="p-4">
+                              <div className="font-bold text-indigo-600 text-lg">
+                                {formatCurrency(p.price)}
+                              </div>
+                              {p.originalPrice && p.originalPrice > p.price && (
+                                <div className="text-xs text-slate-400 line-through">
+                                  {formatCurrency(p.originalPrice)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 text-center">
+                              <Badge
+                                variant="secondary"
+                                className="bg-purple-100 text-purple-700"
+                              >
+                                {p.category}
+                              </Badge>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div
+                                className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${getStockColor(
+                                  totalStock
+                                )}`}
+                              >
+                                {totalStock}
+                              </div>
+                              {p.variants?.length > 0 && (
+                                <div className="text-xs text-slate-400 mt-1">
+                                  {p.variants.length} phiên bản
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 text-center">
+                              <Badge variant="outline">
+                                {typeof p.brand === 'object'
+                                  ? p.brand?.name
+                                  : 'N/A'}
+                              </Badge>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(p)}
+                                  className="hover:bg-indigo-100 text-indigo-600"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(p._id)}
+                                  className="hover:bg-red-100 text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Advanced Pagination */}
+              <div className="border-t border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50 p-6">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-slate-600 font-medium">
+                      Hiển thị
+                    </span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value))
+                        setCurrentPage(1)
+                      }}
+                      className="px-3 py-2 rounded-lg border-2 border-slate-200 focus:border-indigo-400 outline-none font-medium"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-slate-600">
+                      trên tổng {totalProducts} sản phẩm
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => handlePageChange(1)}
+                      disabled={currentPage === 1 || loading}
+                      variant="outline"
+                      size="sm"
+                      className="font-medium"
+                    >
+                      Đầu
+                    </Button>
+                    <Button
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1 || loading}
+                      variant="outline"
+                      size="sm"
+                      className="font-medium"
+                    >
+                      Trước
+                    </Button>
+
+                    <div className="flex gap-1">
+                      {Array.from(
+                        { length: Math.min(totalPages, 5) },
+                        (_, i) => {
+                          let pageNum
+                          if (totalPages <= 5) {
+                            pageNum = i + 1
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i
+                          } else {
+                            pageNum = currentPage - 2 + i
+                          }
+
+                          return (
+                            <Button
+                              key={i}
+                              onClick={() => handlePageChange(pageNum)}
+                              variant={
+                                currentPage === pageNum ? 'default' : 'outline'
+                              }
+                              size="sm"
+                              className={
+                                currentPage === pageNum
+                                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600'
+                                  : ''
+                              }
+                            >
+                              {pageNum}
+                            </Button>
+                          )
+                        }
+                      )}
+                    </div>
+
+                    <Button
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages || loading}
+                      variant="outline"
+                      size="sm"
+                      className="font-medium"
+                    >
+                      Sau
+                    </Button>
+                    <Button
+                      onClick={() => handlePageChange(totalPages)}
+                      disabled={currentPage === totalPages || loading}
+                      variant="outline"
+                      size="sm"
+                      className="font-medium"
+                    >
+                      Cuối
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       <ProductForm
         open={isDialogOpen}

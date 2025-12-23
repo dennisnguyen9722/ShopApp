@@ -8,31 +8,67 @@ function createSlug(text) {
   return text
     .toString()
     .toLowerCase()
-    .normalize('NFD') // Tách dấu ra khỏi chữ cái
-    .replace(/[\u0300-\u036f]/g, '') // Xóa các dấu đó đi
-    .replace(/[đĐ]/g, 'd') // Chuyển đ -> d
-    .replace(/([^0-9a-z-\s])/g, '') // Xóa ký tự đặc biệt
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/([^0-9a-z-\s])/g, '')
     .trim()
-    .replace(/(\s+)/g, '-') // Thay khoảng trắng bằng dấu gạch ngang
-    .replace(/-+/g, '-') // Xóa gạch ngang thừa
+    .replace(/(\s+)/g, '-')
+    .replace(/-+/g, '-')
 }
 
-// 1. Lấy tất cả thương hiệu (Công khai)
+// ==============================================================================
+// 1. GET ALL (Có Phân trang & Tìm kiếm)
+// Query: ?page=1&limit=10&search=samsung
+// ==============================================================================
 router.get('/', async (req, res) => {
   try {
-    const brands = await Brand.find().sort({ name: 1 }) // Sắp xếp theo tên A-Z
-    res.json(brands)
+    // 1. Lấy tham số (Mặc định trang 1, 10 dòng)
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const skip = (page - 1) * limit
+    const search = req.query.search || ''
+
+    // 2. Tạo bộ lọc
+    const query = {}
+
+    // Tìm kiếm theo tên thương hiệu
+    if (search) {
+      query.name = { $regex: search, $options: 'i' }
+    }
+
+    // 3. Chạy song song: Tìm dữ liệu + Đếm tổng
+    const [brands, total] = await Promise.all([
+      Brand.find(query)
+        .sort({ name: 1 }) // A-Z
+        .skip(skip)
+        .limit(limit),
+      Brand.countDocuments(query)
+    ])
+
+    // 4. Trả về cấu trúc chuẩn
+    res.json({
+      success: true,
+      brands,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
 
-// 2. Thêm thương hiệu mới (Chỉ Admin/Manager)
+// ==============================================================================
+// 2. CREATE (Admin/Manager)
+// ==============================================================================
 router.post('/', protect, async (req, res) => {
   try {
     const { name, image, description } = req.body
 
-    // Kiểm tra trùng tên trước khi tạo (Optional nhưng nên có)
     const brandExists = await Brand.findOne({ name })
     if (brandExists) {
       return res.status(400).json({ message: 'Thương hiệu đã tồn tại' })
@@ -47,27 +83,29 @@ router.post('/', protect, async (req, res) => {
   }
 })
 
-// 3. Sửa thương hiệu (MỚI THÊM) - Chỉ Admin
+// ==============================================================================
+// 3. UPDATE (Admin Only)
+// ==============================================================================
 router.put('/:id', protect, adminOnly, async (req, res) => {
   try {
     const { name, image, description } = req.body
     const brand = await Brand.findById(req.params.id)
 
-    if (!brand) {
+    if (!brand)
       return res.status(404).json({ message: 'Không tìm thấy thương hiệu' })
+
+    // Check trùng tên nếu đổi tên (trừ chính nó)
+    if (name && name !== brand.name) {
+      const exists = await Brand.findOne({ name, _id: { $ne: req.params.id } })
+      if (exists)
+        return res.status(400).json({ message: 'Tên thương hiệu bị trùng' })
+
+      brand.name = name
+      brand.slug = createSlug(name)
     }
 
-    // Cập nhật từng trường
-    if (name) {
-      brand.name = name
-      brand.slug = createSlug(name) // Tên đổi thì Slug đổi theo
-    }
-    if (image) {
-      brand.image = image
-    }
-    if (description) {
-      brand.description = description
-    }
+    if (image) brand.image = image
+    if (description) brand.description = description
 
     const updatedBrand = await brand.save()
     res.json(updatedBrand)
@@ -76,15 +114,15 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
   }
 })
 
-// 4. Xóa thương hiệu (Chỉ Admin)
+// ==============================================================================
+// 4. DELETE (Admin Only)
+// ==============================================================================
 router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
     const brand = await Brand.findByIdAndDelete(req.params.id)
-    if (!brand) {
-      return res
-        .status(404)
-        .json({ message: 'Không tìm thấy thương hiệu để xóa' })
-    }
+    if (!brand)
+      return res.status(404).json({ message: 'Không tìm thấy thương hiệu' })
+
     res.json({ message: 'Đã xóa thương hiệu thành công' })
   } catch (err) {
     res.status(500).json({ message: err.message })

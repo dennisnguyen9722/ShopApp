@@ -38,7 +38,7 @@ async function sendEmail({ email, subject, order }) {
               return `
               <li>
                 ${
-                  item.title ||
+                  item.productName ||
                   item.product?.title ||
                   item.name ||
                   item.productName ||
