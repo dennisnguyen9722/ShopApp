@@ -11,14 +11,12 @@ import {
   XCircle,
   Plus,
   History,
-  Edit,
-  ChevronLeft, // 👇 Import icon mũi tên
+  ChevronLeft,
   ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
-// UI Components
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -53,30 +51,26 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
 
-  // 👇 1. STATE PHÂN TRANG
+  // Phân trang
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
-  const LIMIT = 10 // Số lượng mỗi trang
+  const LIMIT = 10
 
-  // State nhập hàng
+  // Nhập hàng
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
+  const [selectedVariant, setSelectedVariant] = useState<any>(null)
   const [importQuantity, setImportQuantity] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const router = useRouter()
 
-  // 👇 2. SỬA HÀM FETCH ĐỂ NHẬN TRANG
   const fetchProducts = async (page = 1) => {
     setLoading(true)
     try {
-      // Gọi API kèm tham số phân trang
       const { data } = await axiosClient.get(
         `/products?page=${page}&limit=${LIMIT}`
       )
-
-      // Backend trả về: { products: [], totalPages: 5, totalProducts: 50, currentPage: 1 }
-      // (Lưu ý: Nếu backend chưa trả về cấu trúc này, bạn cần update backend như hướng dẫn trước đó)
       setProducts(data.products || [])
       setTotalPages(data.totalPages || 1)
       setTotalProducts(data.totalProducts || 0)
@@ -88,12 +82,10 @@ export default function InventoryPage() {
     }
   }
 
-  // Gọi fetch khi component mount hoặc currentPage đổi
   useEffect(() => {
     fetchProducts(currentPage)
   }, [currentPage])
 
-  // Hàm tính tồn kho thực tế
   const calculateRealStock = (product: any) => {
     if (product.variants && product.variants.length > 0) {
       return product.variants.reduce(
@@ -104,7 +96,7 @@ export default function InventoryPage() {
     return product.stock || 0
   }
 
-  // Xử lý nhập kho
+  // ✅ Hàm nhập kho có xử lý cả variant
   const handleRestock = async () => {
     const qty = parseInt(importQuantity)
     if (!selectedProduct || isNaN(qty) || qty <= 0) {
@@ -114,25 +106,63 @@ export default function InventoryPage() {
 
     setIsSubmitting(true)
     try {
-      const currentStock = calculateRealStock(selectedProduct)
-      const newStock = currentStock + qty
+      // Nếu có variants thì phải chọn biến thể
+      if (selectedProduct.variants && selectedProduct.variants.length > 0) {
+        if (!selectedVariant) {
+          toast.warning('Vui lòng chọn biến thể cần nhập kho')
+          setIsSubmitting(false)
+          return
+        }
 
-      await axiosClient.put(`/products/${selectedProduct._id}`, {
-        stock: newStock
-      })
+        const newVariantStock = (selectedVariant.stock || 0) + qty
 
-      toast.success(
-        `Đã nhập thêm ${qty} sản phẩm cho "${selectedProduct.title}"`
-      )
-
-      // Update UI cục bộ
-      setProducts((prev) =>
-        prev.map((p) =>
-          p._id === selectedProduct._id ? { ...p, stock: newStock } : p
+        await axiosClient.put(
+          `/products/${selectedProduct._id}/variant/${selectedVariant._id}`,
+          { stock: newVariantStock }
         )
-      )
+
+        // Cập nhật UI cục bộ
+        setProducts((prev) =>
+          prev.map((p) =>
+            p._id === selectedProduct._id
+              ? {
+                  ...p,
+                  variants: p.variants.map((v: any) =>
+                    v._id === selectedVariant._id
+                      ? { ...v, stock: newVariantStock }
+                      : v
+                  )
+                }
+              : p
+          )
+        )
+
+        toast.success(
+          `Đã nhập thêm ${qty} sản phẩm cho biến thể "${
+            selectedVariant.name || selectedVariant.variantName || 'Biến thể'
+          }"`
+        )
+      } else {
+        // Sản phẩm không có biến thể
+        const newStock = (selectedProduct.stock || 0) + qty
+
+        await axiosClient.put(`/products/${selectedProduct._id}`, {
+          stock: newStock
+        })
+
+        setProducts((prev) =>
+          prev.map((p) =>
+            p._id === selectedProduct._id ? { ...p, stock: newStock } : p
+          )
+        )
+
+        toast.success(
+          `Đã nhập thêm ${qty} sản phẩm cho "${selectedProduct.title}"`
+        )
+      }
 
       setSelectedProduct(null)
+      setSelectedVariant(null)
       setImportQuantity('')
     } catch (error) {
       toast.error('Lỗi nhập kho')
@@ -161,7 +191,6 @@ export default function InventoryPage() {
     }
   }
 
-  // Filter Logic (Lưu ý: Chỉ filter trên trang hiện tại)
   const filteredProducts = products.filter((product) => {
     const realStock = calculateRealStock(product)
     const matchesSearch = product.title
@@ -177,7 +206,6 @@ export default function InventoryPage() {
     return matchesSearch && matchesFilter
   })
 
-  // Stats (Tính trên trang hiện tại - Để chính xác cần API stats riêng từ backend)
   const stats = {
     totalItems: products.reduce((acc, p) => acc + calculateRealStock(p), 0),
     lowStockCount: products.filter((p) => {
@@ -189,6 +217,7 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
@@ -204,7 +233,7 @@ export default function InventoryPage() {
         </Button>
       </div>
 
-      {/* 1. THỐNG KÊ (Current Page) */}
+      {/* Thống kê */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="shadow-sm border-l-4 border-l-red-500">
           <CardHeader className="pb-2">
@@ -244,7 +273,7 @@ export default function InventoryPage() {
         </Card>
       </div>
 
-      {/* 2. THANH CÔNG CỤ */}
+      {/* Bộ lọc */}
       <Card className="border-none shadow-sm">
         <CardContent className="p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
           <div className="relative w-full md:w-96">
@@ -273,7 +302,7 @@ export default function InventoryPage() {
         </CardContent>
       </Card>
 
-      {/* 3. BẢNG DỮ LIỆU */}
+      {/* Bảng dữ liệu */}
       <Card className="border-none shadow-sm">
         <CardContent className="p-0">
           <div className="rounded-md border overflow-hidden">
@@ -345,7 +374,6 @@ export default function InventoryPage() {
                             ? product.category?.name
                             : '---'}
                         </TableCell>
-
                         <TableCell className="text-center">
                           <span
                             className={`font-bold text-lg ${
@@ -367,25 +395,14 @@ export default function InventoryPage() {
                             <StatusIcon className="w-3 h-3" /> {status.label}
                           </Badge>
                         </TableCell>
-
                         <TableCell className="text-right">
-                          {hasVariants ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => router.push('/products')}
-                            >
-                              <Edit className="w-4 h-4 mr-1" /> Chi tiết
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              className="bg-indigo-600 hover:bg-indigo-700"
-                              onClick={() => setSelectedProduct(product)}
-                            >
-                              <Plus className="w-4 h-4 mr-1" /> Nhập hàng
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            className="bg-indigo-600 hover:bg-indigo-700"
+                            onClick={() => setSelectedProduct(product)}
+                          >
+                            <Plus className="w-4 h-4 mr-1" /> Nhập hàng
+                          </Button>
                         </TableCell>
                       </TableRow>
                     )
@@ -395,7 +412,7 @@ export default function InventoryPage() {
             </Table>
           </div>
 
-          {/* 👇 3. FOOTER PHÂN TRANG */}
+          {/* Phân trang */}
           <div className="flex items-center justify-between px-4 py-4 border-t bg-gray-50/50">
             <div className="text-sm text-gray-500">
               Hiển thị trang{' '}
@@ -426,10 +443,16 @@ export default function InventoryPage() {
         </CardContent>
       </Card>
 
-      {/* --- MODAL NHẬP HÀNG (Giữ nguyên) --- */}
+      {/* Modal nhập hàng */}
       <Dialog
         open={!!selectedProduct}
-        onOpenChange={(open) => !open && setSelectedProduct(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedProduct(null)
+            setSelectedVariant(null)
+            setImportQuantity('')
+          }
+        }}
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -460,6 +483,47 @@ export default function InventoryPage() {
                 </div>
               </div>
 
+              {/* Nếu có variants thì hiển thị dropdown */}
+              {selectedProduct.variants &&
+                selectedProduct.variants.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium">Chọn biến thể</label>
+                    <Select
+                      value={selectedVariant?._id || ''}
+                      onValueChange={(val) => {
+                        const v = selectedProduct.variants.find(
+                          (v: any) => v._id === val
+                        )
+                        setSelectedVariant(v)
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn biến thể cần nhập kho" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {selectedProduct.variants.map((v: any) => {
+                          const labelParts = [
+                            v.color ? `Màu: ${v.color}` : null,
+                            v.ram ? `RAM: ${v.ram}` : null,
+                            v.storage ? `Bộ nhớ: ${v.storage}` : null
+                          ].filter(Boolean)
+
+                          const label =
+                            labelParts.length > 0
+                              ? labelParts.join(' / ')
+                              : 'Biến thể chưa đặt tên'
+
+                          return (
+                            <SelectItem key={v._id} value={v._id}>
+                              {label} – tồn: {v.stock ?? 0}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
               <div className="grid grid-cols-4 items-center gap-4">
                 <label
                   htmlFor="qty"
@@ -478,28 +542,44 @@ export default function InventoryPage() {
                 />
               </div>
 
-              {importQuantity && !isNaN(parseInt(importQuantity)) && (
-                <div className="text-center text-sm text-gray-500 mt-2">
-                  Sau khi nhập:{' '}
-                  <span className="font-bold text-gray-900">
-                    {calculateRealStock(selectedProduct)}
-                  </span>{' '}
-                  +{' '}
-                  <span className="font-bold text-green-600">
-                    {importQuantity}
-                  </span>{' '}
-                  ={' '}
-                  <span className="font-bold text-indigo-600 text-lg">
-                    {calculateRealStock(selectedProduct) +
-                      parseInt(importQuantity)}
-                  </span>
-                </div>
-              )}
+              {/* Hiển thị tính toán sau khi nhập */}
+              {importQuantity &&
+                !isNaN(parseInt(importQuantity)) &&
+                (!selectedProduct.variants ||
+                  selectedProduct.variants.length === 0 ||
+                  selectedVariant) && (
+                  <div className="text-center text-sm text-gray-500 mt-2">
+                    Sau khi nhập:{' '}
+                    <span className="font-bold text-gray-900">
+                      {selectedVariant
+                        ? selectedVariant.stock
+                        : calculateRealStock(selectedProduct)}
+                    </span>{' '}
+                    +{' '}
+                    <span className="font-bold text-green-600">
+                      {importQuantity}
+                    </span>{' '}
+                    ={' '}
+                    <span className="font-bold text-indigo-600 text-lg">
+                      {selectedVariant
+                        ? selectedVariant.stock + parseInt(importQuantity)
+                        : calculateRealStock(selectedProduct) +
+                          parseInt(importQuantity)}
+                    </span>
+                  </div>
+                )}
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedProduct(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedProduct(null)
+                setSelectedVariant(null)
+                setImportQuantity('')
+              }}
+            >
               Hủy
             </Button>
             <Button

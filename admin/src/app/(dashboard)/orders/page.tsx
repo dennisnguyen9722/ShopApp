@@ -558,7 +558,7 @@ export default function OrdersPage() {
                 </CardContent>
               </Card>
 
-              {/* CẬP NHẬT TRẠNG THÁI */}
+              {/* CẬP NHẬT TRẠNG THÁI - FIXED */}
               <Card className="border-2 border-indigo-100 shadow-sm">
                 <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50">
                   <CardTitle className="text-lg text-gray-800">
@@ -567,6 +567,7 @@ export default function OrdersPage() {
                 </CardHeader>
                 <CardContent className="pt-5">
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {/* CHƯA XỬ LÝ */}
                     <Button
                       variant={
                         selectedOrder.status === 'pending'
@@ -589,6 +590,8 @@ export default function OrdersPage() {
                     >
                       Chờ xử lý
                     </Button>
+
+                    {/* XÁC NHẬN - Chỉ cho phép từ pending */}
                     <Button
                       variant={
                         selectedOrder.status === 'confirmed'
@@ -599,8 +602,8 @@ export default function OrdersPage() {
                       disabled={
                         selectedOrder.status === 'completed' ||
                         selectedOrder.status === 'cancelled' ||
-                        (selectedOrder.status !== 'pending' &&
-                          selectedOrder.status !== 'confirmed')
+                        selectedOrder.status === 'shipping' ||
+                        selectedOrder.status === 'confirmed'
                       }
                       className={
                         selectedOrder.status === 'confirmed'
@@ -613,6 +616,8 @@ export default function OrdersPage() {
                     >
                       Xác nhận
                     </Button>
+
+                    {/* ĐANG GIAO - Chỉ cho phép từ confirmed */}
                     <Button
                       variant={
                         selectedOrder.status === 'shipping'
@@ -623,8 +628,8 @@ export default function OrdersPage() {
                       disabled={
                         selectedOrder.status === 'completed' ||
                         selectedOrder.status === 'cancelled' ||
-                        (selectedOrder.status !== 'confirmed' &&
-                          selectedOrder.status !== 'shipping')
+                        selectedOrder.status === 'pending' ||
+                        selectedOrder.status === 'shipping'
                       }
                       className={
                         selectedOrder.status === 'shipping'
@@ -637,6 +642,8 @@ export default function OrdersPage() {
                     >
                       Đang giao
                     </Button>
+
+                    {/* HOÀN THÀNH - Chỉ cho phép từ shipping */}
                     <Button
                       variant={
                         selectedOrder.status === 'completed'
@@ -647,7 +654,8 @@ export default function OrdersPage() {
                       disabled={
                         selectedOrder.status === 'completed' ||
                         selectedOrder.status === 'cancelled' ||
-                        selectedOrder.status !== 'shipping'
+                        selectedOrder.status === 'pending' ||
+                        selectedOrder.status === 'confirmed'
                       }
                       className={
                         selectedOrder.status === 'completed'
@@ -660,6 +668,8 @@ export default function OrdersPage() {
                     >
                       Hoàn thành
                     </Button>
+
+                    {/* HỦY ĐƠN - Cho phép từ bất kỳ trạng thái nào trừ completed/cancelled */}
                     <Button
                       variant={
                         selectedOrder.status === 'cancelled'
