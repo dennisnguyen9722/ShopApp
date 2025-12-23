@@ -61,14 +61,20 @@ async function sendEmail({ email, subject, order }) {
       </div>
     `
 
-    // Tạo object và gán properties
-    const sendSmtpEmail = new Brevo.SendSmtpEmail()
-    sendSmtpEmail.subject = subject
-    sendSmtpEmail.htmlContent = htmlContent
-    sendSmtpEmail.sender = { name: 'SuperMall', email: process.env.BREVO_USER }
-    sendSmtpEmail.to = [{ email }]
+    // Dùng plain object thay vì SendSmtpEmail class
+    const emailData = {
+      sender: { name: 'SuperMall', email: process.env.BREVO_USER },
+      to: [{ email: email }],
+      subject: subject,
+      htmlContent: htmlContent
+    }
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail)
+    console.log(
+      '📧 Đang gửi email với data:',
+      JSON.stringify(emailData, null, 2)
+    )
+
+    await apiInstance.sendTransacEmail(emailData)
     console.log(`✅ Email xác nhận đã gửi đến: ${email}`)
   } catch (error) {
     console.error('❌ Lỗi gửi email Brevo:')
@@ -76,6 +82,11 @@ async function sendEmail({ email, subject, order }) {
     console.error('Body:', error.response?.body)
     console.error('Text:', error.response?.text)
     console.error('Message:', error.message)
+
+    // Log thêm để debug
+    if (error.response?.data) {
+      console.error('Response data:', error.response.data)
+    }
   }
 }
 
