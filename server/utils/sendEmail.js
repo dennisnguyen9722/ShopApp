@@ -71,10 +71,13 @@ async function sendEmail({ email, subject, order }) {
     await apiInstance.sendTransacEmail(sendSmtpEmail)
     console.log(`✅ Email xác nhận đã gửi đến: ${email}`)
   } catch (error) {
-    console.error(
-      '❌ Lỗi gửi email Brevo:',
-      error.response?.text || error.message
-    )
+    // ← THÊM LOG CHI TIẾT Ở ĐÂY
+    console.error('❌ Lỗi gửi email Brevo:')
+    console.error('Status:', error.response?.status)
+    console.error('Body:', error.response?.body)
+    console.error('Text:', error.response?.text)
+    console.error('Message:', error.message)
+    console.error('Full error:', JSON.stringify(error, null, 2))
   }
 }
 

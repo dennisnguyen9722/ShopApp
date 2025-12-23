@@ -1,27 +1,21 @@
 import axios from 'axios'
 
-// 🧩 Tự động chọn API URL theo môi trường
-const baseURL =
-  process.env.NODE_ENV === 'development'
-    ? 'http://localhost:5001/api' // ✅ chạy local (backend port 5001)
-    : process.env.NEXT_PUBLIC_API_URL ||
-      'https://supermall-api.onrender.com/api' // ✅ production (Render)
-
-console.log('🔗 API baseURL:', baseURL)
-
 const axiosClient = axios.create({
-  baseURL,
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
   }
 })
 
-// ✅ Request interceptor – tự động gắn token vào header
+// ✅ SỬA ĐOẠN NÀY: Thêm logic lấy Token gắn vào Header
 axiosClient.interceptors.request.use(
   (config) => {
+    // 1. Lấy token từ LocalStorage (nếu đang chạy ở trình duyệt)
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token')
+
+      // 2. Nếu có token thì kẹp vào Header "Authorization"
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
       }
@@ -36,7 +30,7 @@ axiosClient.interceptors.request.use(
   }
 )
 
-// ✅ Response interceptor – log phản hồi & xử lý lỗi mạng
+// Đoạn Response bên dưới giữ nguyên
 axiosClient.interceptors.response.use(
   (response) => {
     console.log('📥 Response:', response.status, response.config.url)
