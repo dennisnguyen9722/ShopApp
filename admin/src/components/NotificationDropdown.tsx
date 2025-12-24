@@ -5,7 +5,6 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Bell, Package, AlertTriangle, Star } from 'lucide-react'
 import { io } from 'socket.io-client'
 import { useRouter } from 'next/navigation'
-// 👇 1. IMPORT TOAST
 import { toast } from 'sonner'
 
 import {
@@ -42,6 +41,7 @@ export function NotificationDropdown() {
   const socketRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Fetch thông báo ban đầu
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
@@ -55,6 +55,7 @@ export function NotificationDropdown() {
     fetchNotifications()
   }, [])
 
+  // Xử lý thông báo mới
   const handleNewNotification = useCallback(
     (notif: Notification) => {
       // Phát âm thanh
@@ -66,41 +67,44 @@ export function NotificationDropdown() {
       setNotifications((prev) => [notif, ...prev])
       setUnreadCount((prev) => prev + 1)
 
-      // 👇 2. HIỆN TOAST (PHẦN BẠN CẦN)
-      // Tùy vào loại thông báo mà hiện màu khác nhau
+      // Hiện toast
       if (notif.type === 'ORDER') {
         toast.success(notif.title, {
           description: notif.message,
           duration: 5000,
           action: {
             label: 'Xem ngay',
-            onClick: () => router.push(notif.link) // Bấm vào toast là chuyển trang luôn
+            onClick: () => router.push(notif.link)
           },
           style: {
             border: '1px solid #10B981',
             color: '#064E3B',
             background: '#ECFDF5'
-          } // Màu xanh lá
+          }
         })
       } else if (notif.type === 'STOCK') {
         toast.error(notif.title, {
           description: notif.message,
+          duration: 5000,
           action: {
             label: 'Kiểm tra',
             onClick: () => router.push(notif.link)
           }
         })
       } else {
-        toast.info(notif.title, { description: notif.message })
+        toast.info(notif.title, {
+          description: notif.message,
+          duration: 5000
+        })
       }
     },
     [router]
-  ) // Nhớ thêm router vào dependency
+  )
 
-  // 3. KẾT NỐI SOCKET
+  // Kết nối Socket
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      audioRef.current = new Audio('/sounds/notification.mp3') // Đảm bảo đường dẫn đúng
+      audioRef.current = new Audio('/sounds/notification.mp3')
     }
 
     socketRef.current = io(SOCKET_URL, {
@@ -115,7 +119,7 @@ export function NotificationDropdown() {
         type: 'ORDER',
         title: 'Đơn hàng mới! 🤑',
         message: `Đơn #${data.orderCode} - ${data.customerName}\nTổng tiền: ${data.totalPrice}`,
-        link: `/orders?id=${data.orderId}`, // Đảm bảo link đúng admin
+        link: `/orders?id=${data.orderId}`,
         createdAt: new Date().toISOString(),
         isRead: false
       })
@@ -135,30 +139,51 @@ export function NotificationDropdown() {
     })
 
     return () => {
-      socketRef.current.disconnect()
+      socketRef.current?.disconnect()
     }
   }, [handleNewNotification])
 
-  // ... (Phần UI Dropdown bên dưới GIỮ NGUYÊN không cần sửa) ...
-
-  // Logic đánh dấu đã đọc
-  const handleItemClick = (notif: Notification) => {
-    setUnreadCount((prev) => Math.max(0, prev - 1))
-    setNotifications((prev) =>
-      prev.map((n) => (n._id === notif._id ? { ...n, isRead: true } : n))
-    )
-    setIsOpen(false)
-    router.push(notif.link)
-  }
-
-  const handleClearAll = async () => {
-    setNotifications([])
-    setUnreadCount(0)
+  // ✅ FIX 1: Đánh dấu 1 thông báo đã đọc (LƯU VÀO DB)
+  const handleItemClick = async (notif: Notification) => {
     try {
-      await axiosClient.put('/notifications/read-all')
-    } catch (e) {}
+      // Update UI ngay lập tức (optimistic update)
+      if (!notif.isRead) {
+        setUnreadCount((prev) => Math.max(0, prev - 1))
+        setNotifications((prev) =>
+          prev.map((n) => (n._id === notif._id ? { ...n, isRead: true } : n))
+        )
+      }
+
+      // Gọi API để lưu vào database
+      await axiosClient.put(`/notifications/${notif._id}/read`)
+
+      // Chuyển trang
+      setIsOpen(false)
+      router.push(notif.link)
+    } catch (error) {
+      console.error('Lỗi đánh dấu đã đọc:', error)
+      toast.error('Không thể đánh dấu đã đọc')
+    }
   }
 
+  // ✅ FIX 2: Đánh dấu TẤT CẢ đã đọc (KHÔNG XÓA, CHỈ ĐỔI TRẠNG THÁI)
+  const handleClearAll = async () => {
+    try {
+      // Gọi API để update DB
+      await axiosClient.put('/notifications/read-all')
+
+      // Cập nhật state: Tất cả isRead = true (KHÔNG xóa)
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+      setUnreadCount(0)
+
+      toast.success('Đã đánh dấu tất cả đã đọc')
+    } catch (error) {
+      console.error('Lỗi đánh dấu đã đọc:', error)
+      toast.error('Không thể đánh dấu đã đọc')
+    }
+  }
+
+  // Icon theo loại thông báo
   const renderIcon = (type: string) => {
     switch (type) {
       case 'ORDER':
@@ -188,11 +213,11 @@ export function NotificationDropdown() {
         className="w-80 bg-white shadow-lg border-slate-100 rounded-xl"
       >
         <DropdownMenuLabel className="flex justify-between items-center px-4 py-3">
-          <span>Thông báo</span>
+          <span className="font-bold text-slate-800">Thông báo</span>
           {unreadCount > 0 && (
             <Badge
               variant="secondary"
-              className="text-xs bg-indigo-50 text-indigo-600"
+              className="text-xs bg-indigo-50 text-indigo-600 font-semibold"
             >
               {unreadCount} mới
             </Badge>
@@ -203,14 +228,15 @@ export function NotificationDropdown() {
         <div className="max-h-[350px] overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">
-              Không có thông báo nào
+              <Bell className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <p>Không có thông báo nào</p>
             </div>
           ) : (
             notifications.map((item) => (
               <DropdownMenuItem
                 key={item._id}
                 onClick={() => handleItemClick(item)}
-                className={`cursor-pointer px-4 py-3 border-b border-slate-50 last:border-0 items-start gap-3 ${
+                className={`cursor-pointer px-4 py-3 border-b border-slate-50 last:border-0 items-start gap-3 hover:bg-slate-50 transition-colors ${
                   item.isRead ? 'opacity-60 bg-white' : 'bg-blue-50/30'
                 }`}
               >
@@ -234,7 +260,7 @@ export function NotificationDropdown() {
                   </p>
                 </div>
                 {!item.isRead && (
-                  <div className="w-2 h-2 rounded-full bg-blue-500 mt-2"></div>
+                  <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
                 )}
               </DropdownMenuItem>
             ))
@@ -246,7 +272,7 @@ export function NotificationDropdown() {
             <Button
               variant="link"
               size="sm"
-              className="text-xs text-slate-500 h-auto p-0"
+              className="text-xs text-slate-500 hover:text-emerald-600 h-auto p-0 font-medium"
               onClick={handleClearAll}
             >
               Đánh dấu tất cả đã đọc

@@ -2,7 +2,10 @@
 
 import React from 'react'
 import { NotificationDropdown } from '@/components/NotificationDropdown'
-import { Menu, Search, User, LogOut } from 'lucide-react' // Import thêm LogOut cho đẹp
+// 👇 1. Import thêm Settings và Link
+import { Menu, Search, User, LogOut, Settings } from 'lucide-react'
+import Link from 'next/link'
+
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,17 +17,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-
-// 👇 1. IMPORT HOOK AUTH
 import { useAuth } from '@/context/AuthContext'
 
 export default function Header() {
-  // 👇 2. LẤY DATA USER VÀ HÀM LOGOUT
   const { user, logout } = useAuth()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-white px-6 shadow-sm">
-      {/* --- LEFT SIDE: Mobile Menu & Search --- */}
+      {/* --- LEFT SIDE --- */}
       <div className="flex items-center gap-4 flex-1">
         <Button variant="ghost" size="icon" className="md:hidden">
           <Menu className="h-5 w-5" />
@@ -40,26 +40,21 @@ export default function Header() {
         </div>
       </div>
 
-      {/* --- RIGHT SIDE: Actions --- */}
+      {/* --- RIGHT SIDE --- */}
       <div className="flex items-center gap-3">
-        {/* Component Thông báo (Socket.io) */}
         <NotificationDropdown />
 
         <div className="h-6 w-px bg-slate-200 mx-1"></div>
 
-        {/* 3. USER PROFILE DROPDOWN (Đã sửa dynamic data) */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full">
               <Avatar className="h-9 w-9 border border-slate-200">
-                {/* 👇 Hiển thị Avatar thật của user */}
                 <AvatarImage
                   src={user?.avatar}
                   alt={user?.name || 'User'}
-                  className="object-cover" // Thêm object-cover cho ảnh đẹp
+                  className="object-cover"
                 />
-
-                {/* 👇 Fallback: Nếu không có ảnh thì lấy chữ cái đầu */}
                 <AvatarFallback className="bg-indigo-100 text-indigo-600 font-bold">
                   {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </AvatarFallback>
@@ -70,11 +65,9 @@ export default function Header() {
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                {/* 👇 Hiển thị Tên thật */}
                 <p className="text-sm font-medium leading-none">
                   {user?.name || 'Người dùng'}
                 </p>
-                {/* 👇 Hiển thị Email thật */}
                 <p className="text-xs leading-none text-muted-foreground truncate">
                   {user?.email || 'no-email@supermall.com'}
                 </p>
@@ -83,18 +76,23 @@ export default function Header() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem className="cursor-pointer">
-              <User className="mr-2 h-4 w-4" />
-              <span>Hồ sơ cá nhân</span>
+            {/* 👇 2. SỬA CHỖ NÀY: Dùng asChild và Link để chuyển trang */}
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link href="/profile" className="flex items-center w-full">
+                <User className="mr-2 h-4 w-4" />
+                <span>Hồ sơ cá nhân</span>
+              </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuItem className="cursor-pointer">
-              Cài đặt
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link href="/settings" className="flex items-center w-full">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Cài đặt</span>
+              </Link>
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
-            {/* 👇 Gắn hàm Logout vào đây */}
             <DropdownMenuItem
               className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
               onClick={logout}
