@@ -1,11 +1,10 @@
 const express = require('express')
 const router = express.Router()
-const User = require('../models/User') // 👈 QUAN TRỌNG: Sửa Customer thành User
-const Order = require('../models/Order')
+const Order = require('../models/Order') // Lấy từ Order chứ không lấy từ User nữa
 const { protect } = require('../middleware/authMiddleware')
 
 // ==============================================================================
-// 1. LẤY DANH SÁCH KHÁCH HÀNG (Lấy từ bảng User có role='user')
+// 1. LẤY DANH SÁCH KHÁCH HÀNG (TỪ LỊCH SỬ ĐƠN HÀNG)
 // ==============================================================================
 router.get('/', protect, async (req, res) => {
   try {
@@ -14,35 +13,75 @@ router.get('/', protect, async (req, res) => {
     const skip = (page - 1) * limit
     const search = req.query.search || ''
 
-    // Bộ lọc: Chỉ lấy role là 'user' (Khách hàng)
-    const query = { role: 'user' }
+    // Pipeline xử lý dữ liệu
+    const pipeline = [
+      // 1. Chỉ lấy các đơn hàng có thông tin khách hàng
+      {
+        $match: {
+          'customer.email': { $exists: true, $ne: null }
+        }
+      },
+      // 2. Nếu có tìm kiếm thì lọc trước khi gom nhóm
+      ...(search
+        ? [
+            {
+              $match: {
+                $or: [
+                  { 'customer.name': { $regex: search, $options: 'i' } },
+                  { 'customer.email': { $regex: search, $options: 'i' } },
+                  { 'customer.phone': { $regex: search, $options: 'i' } }
+                ]
+              }
+            }
+          ]
+        : []),
+      // 3. Gom nhóm theo Email (để 1 khách mua nhiều lần chỉ hiện 1 dòng)
+      {
+        $group: {
+          _id: '$customer.email', // Khóa chính là Email
+          name: { $first: '$customer.name' },
+          phone: { $first: '$customer.phone' },
+          address: { $first: '$customer.address' },
+          avatar: { $first: '' }, // Khách vãng lai không có avatar
+          totalSpent: { $sum: '$totalAmount' }, // Tổng tiền đã mua
+          orderCount: { $sum: 1 }, // Tổng số đơn
+          lastOrderDate: { $max: '$createdAt' }, // Ngày mua gần nhất
+          isBlocked: { $first: false } // Mặc định chưa hỗ trợ block theo email
+        }
+      },
+      // 4. Sắp xếp: Khách mua gần nhất lên đầu
+      { $sort: { lastOrderDate: -1 } },
+      // 5. Phân trang (Facet giúp lấy cả data và tổng số lượng cùng lúc)
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [{ $skip: skip }, { $limit: limit }]
+        }
+      }
+    ]
 
-    // Nếu có tìm kiếm
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
-      ]
-    }
+    const result = await Order.aggregate(pipeline)
 
-    // Chạy song song
-    const [customers, total] = await Promise.all([
-      User.find(query)
-        .select('-password') // Bỏ mật khẩu
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      User.countDocuments(query)
-    ])
+    const customers = result[0].data
+    const total = result[0].metadata[0] ? result[0].metadata[0].total : 0
 
-    // Map lại dữ liệu để khớp với Frontend (nếu cần)
-    // Frontend đang mong đợi field 'avatar', 'address', 'isBlocked'
-    // Model User của bạn chắc chắn đã có các field này.
+    // Map lại dữ liệu để có _id (frontend cần key này)
+    const formattedCustomers = customers.map((c, index) => ({
+      _id: c._id, // Dùng email làm ID luôn
+      name: c.name,
+      email: c._id,
+      phone: c.phone,
+      address: c.address,
+      avatar: c.avatar,
+      totalSpent: c.totalSpent,
+      orderCount: c.orderCount,
+      lastOrderDate: c.lastOrderDate,
+      isBlocked: c.isBlocked
+    }))
 
     res.json({
       success: true,
-      customers, // Trả về list user
+      customers: formattedCustomers,
       pagination: {
         page,
         limit,
@@ -51,57 +90,53 @@ router.get('/', protect, async (req, res) => {
       }
     })
   } catch (err) {
+    console.error(err)
     res.status(500).json({ message: err.message })
   }
 })
 
 // ==============================================================================
-// 2. LẤY CHI TIẾT + LỊCH SỬ MUA
+// 2. LẤY CHI TIẾT KHÁCH (Tìm theo Email thay vì ID)
 // ==============================================================================
-router.get('/:id', protect, async (req, res) => {
+router.get('/:email', protect, async (req, res) => {
   try {
-    // Tìm trong bảng User
-    const customer = await User.findOne({
-      _id: req.params.id,
-      role: 'user'
-    }).select('-password')
+    const email = req.params.email
 
-    if (!customer)
-      return res.status(404).json({ message: 'Không tìm thấy khách hàng' })
-
-    // Tìm đơn hàng của user này
-    const orders = await Order.find({ user: customer._id }).sort({
+    // Tìm tất cả đơn hàng của email này
+    const orders = await Order.find({ 'customer.email': email }).sort({
       createdAt: -1
     })
 
-    res.json({ customer, orders })
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy khách hàng' })
+    }
+
+    // Lấy thông tin mới nhất từ đơn hàng gần nhất
+    const lastOrder = orders[0]
+    const customerInfo = {
+      _id: email,
+      name: lastOrder.customer.name,
+      email: lastOrder.customer.email,
+      phone: lastOrder.customer.phone,
+      address: lastOrder.customer.address,
+      avatar: '',
+      createdAt: orders[orders.length - 1].createdAt // Ngày đơn hàng đầu tiên
+    }
+
+    res.json({ customer: customerInfo, orders })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
 
 // ==============================================================================
-// 3. CHẶN / BỎ CHẶN
+// 3. CHẶN KHÁCH (Với Guest thì chưa chặn được login, chỉ chặn đặt hàng nếu cần)
+// Hiện tại mình tạm disable tính năng này với Guest
 // ==============================================================================
 router.put('/:id/block', protect, async (req, res) => {
-  try {
-    const customer = await User.findById(req.params.id)
-    if (!customer)
-      return res.status(404).json({ message: 'User không tồn tại' })
-
-    // Đảo ngược trạng thái
-    customer.isBlocked = !customer.isBlocked
-    await customer.save()
-
-    res.json({
-      message: customer.isBlocked
-        ? 'Đã chặn tài khoản'
-        : 'Đã mở khóa tài khoản',
-      isBlocked: customer.isBlocked
-    })
-  } catch (err) {
-    res.status(500).json({ message: err.message })
-  }
+  res
+    .status(400)
+    .json({ message: 'Chức năng chặn chỉ áp dụng cho tài khoản đăng ký' })
 })
 
 module.exports = router

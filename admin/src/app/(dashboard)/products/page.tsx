@@ -44,24 +44,36 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [showFilters, setShowFilters] = useState(false)
 
-  // 1. FETCH METADATA
+  // 1. FETCH METADATA (FIX LỖI BRANDS.MAP)
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
         const [resCategories, resBrands] = await Promise.all([
           axiosClient.get('/categories'),
-          axiosClient.get('/brands')
+          // Lấy tất cả brands (không phân trang hoặc lấy số lượng lớn) để fill vào dropdown
+          axiosClient.get('/brands?limit=100')
         ])
+
         setCategories(resCategories.data || [])
-        setBrands(resBrands.data || [])
+
+        // FIX LỖI TẠI ĐÂY: Kiểm tra cấu trúc trả về của API Brands
+        const brandData = resBrands.data
+        if (Array.isArray(brandData)) {
+          setBrands(brandData) // API cũ (trả về mảng)
+        } else if (brandData.brands && Array.isArray(brandData.brands)) {
+          setBrands(brandData.brands) // API mới (trả về object có key brands)
+        } else {
+          setBrands([]) // Fallback an toàn
+        }
       } catch (error) {
         console.error('Lỗi tải metadata', error)
+        setBrands([]) // Tránh lỗi crash nếu API fail
       }
     }
     fetchMetadata()
   }, [])
 
-  // 2. FETCH PRODUCTS - GIỮ NGUYÊN LOGIC CỦA BẠN
+  // 2. FETCH PRODUCTS
   const fetchProducts = async (page: number) => {
     setLoading(true)
     try {
@@ -70,12 +82,18 @@ export default function ProductsPage() {
       if (searchTerm) url += `&search=${searchTerm}`
 
       const { data } = await axiosClient.get(url)
-      setProducts(data.products || [])
-      setTotalPages(data.totalPages || 1)
-      setTotalProducts(data.total || 0)
-      setCurrentPage(data.currentPage || 1)
+
+      // Support cả 2 cấu trúc response (để an toàn)
+      if (data.products) {
+        setProducts(data.products)
+        setTotalPages(data.totalPages || 1)
+        setTotalProducts(data.total || 0)
+        setCurrentPage(data.currentPage || 1)
+      } else {
+        setProducts([])
+      }
     } catch (error) {
-      toast.error('Lỗi tải danh sách')
+      toast.error('Lỗi tải danh sách sản phẩm')
     } finally {
       setLoading(false)
     }
@@ -93,7 +111,7 @@ export default function ProductsPage() {
     return p.stock || 0
   }
 
-  // Handlers - GIỮ NGUYÊN
+  // Handlers
   const handleAddNew = () => {
     setEditingProduct(null)
     setIsDialogOpen(true)
@@ -597,7 +615,7 @@ export default function ProductsPage() {
         onOpenChange={setIsDialogOpen}
         initialData={editingProduct}
         categories={categories}
-        brands={brands}
+        brands={brands} // Bây giờ brands đã chắc chắn là mảng
         onSubmit={handleFormSubmit}
       />
     </div>
